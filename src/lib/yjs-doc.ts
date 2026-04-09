@@ -16,6 +16,7 @@ export function createYDoc(meta: RoomMeta): Y.Doc {
   doc.getMap('poker');
   doc.getMap('timer');
   doc.getArray<Reaction>('reactions');
+  doc.getXmlFragment('notepad');
 
   return doc;
 }

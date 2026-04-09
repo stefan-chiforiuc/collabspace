@@ -41,10 +41,10 @@
 
 | ID | Title | Status | Agent | Priority | Milestone | Notes |
 |----|-------|--------|-------|----------|-----------|-------|
-| T-020 | TipTap notepad + Yjs collaboration | new | backend-expert | must | M3 | FR-05, collaborative editing |
-| T-021 | Notepad UI + multi-cursor awareness | new | frontend-expert | must | M3 | Cursor display, formatting toolbar |
-| T-022 | Export functionality (Markdown, JSON, text) | new | backend-expert | should | M3 | Chat, polls, poker, notepad export |
-| T-023 | Notepad design spec | new | uiux-designer | must | M3 | Editor chrome, toolbar, cursor styles |
+| T-020 | TipTap notepad + Yjs collaboration | done | backend-expert | must | M3 | TipTap v3 + Yjs XmlFragment, code-split chunk |
+| T-021 | Notepad UI + multi-cursor awareness | done | frontend-expert | must | M3 | Toolbar (B/I/Code/H1-3/UL/OL/CodeBlock/Quote), awareness cursor |
+| T-022 | Export functionality (Markdown, JSON, text) | done | backend-expert | should | M3 | Download as .md, .txt, .json from toolbar |
+| T-023 | Notepad design spec | done | uiux-designer | must | M3 | Prose styles, toolbar chrome, dark theme editor |
 
 ## Milestone M4 — Polish
 

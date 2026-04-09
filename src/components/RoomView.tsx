@@ -4,11 +4,13 @@ import { usePolls } from '../hooks/usePolls';
 import { usePoker } from '../hooks/usePoker';
 import { useTimer } from '../hooks/useTimer';
 import { useReactions } from '../hooks/useReactions';
+import { useNotepad } from '../hooks/useNotepad';
 import ParticipantList from './ParticipantList';
 import ChatPanel from './ChatPanel';
 import PollPanel from './PollPanel';
 import PokerPanel from './PokerPanel';
 import TimerPanel from './TimerPanel';
+import NotepadPanel from './NotepadPanel';
 import ReactionsBar from './ReactionsBar';
 import Button from './ui/Button';
 
@@ -16,13 +18,14 @@ interface RoomViewProps {
   roomCode: string;
 }
 
-type Tab = 'chat' | 'polls' | 'poker' | 'timer';
+type Tab = 'chat' | 'polls' | 'poker' | 'timer' | 'notes';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'chat', label: 'Chat' },
   { id: 'polls', label: 'Polls' },
   { id: 'poker', label: 'Poker' },
   { id: 'timer', label: 'Timer' },
+  { id: 'notes', label: 'Notes' },
 ];
 
 export default function RoomView(props: RoomViewProps) {
@@ -31,6 +34,13 @@ export default function RoomView(props: RoomViewProps) {
   const poker = usePoker(room.doc, room.localPeerId(), room.localName);
   const timer = useTimer(room.doc, room.localPeerId(), room.localName);
   const reactions = useReactions(room.doc, room.awareness, room.localPeerId(), room.localName);
+
+  // Find the local participant's color for cursor display
+  const localColor = () => {
+    const p = room.participants().find((p) => p.peerId === room.localPeerId());
+    return p?.color || '#818cf8';
+  };
+  const notepad = useNotepad(room.doc, room.awareness, room.localName, localColor());
 
   const [activeTab, setActiveTab] = createSignal<Tab>('chat');
 
@@ -159,6 +169,16 @@ export default function RoomView(props: RoomViewProps) {
                 onResume={timer.resume}
                 onStop={timer.stop}
                 onDismiss={timer.dismissExpired}
+              />
+            </Show>
+
+            <Show when={activeTab() === 'notes'}>
+              <NotepadPanel
+                createEditor={notepad.createEditor}
+                editor={notepad.editor()}
+                onExportMarkdown={notepad.exportMarkdown}
+                onExportText={notepad.exportText}
+                onExportJSON={notepad.exportJSON}
               />
             </Show>
           </div>

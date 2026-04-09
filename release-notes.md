@@ -2,6 +2,35 @@
 
 ---
 
+## M3 — Collaborative Editing (2026-04-09)
+
+**Branch:** `feature/backend-expert/T-020-m3-collaborative-editing` -> `develop`
+
+### What's New
+- **Shared Notepad (FR-05)**: Real-time collaborative rich-text editor using TipTap v3 + Yjs XmlFragment. All participants type simultaneously with CRDT conflict resolution
+- **Formatting Toolbar**: Bold, italic, inline code, H1-H3, bullet/ordered lists, code blocks, blockquotes — all via toolbar buttons with active state indicators
+- **Export**: Download notepad content as Markdown (.md), plain text (.txt), or JSON (.json) directly from the toolbar
+- **Notes Tab**: New "Notes" tab in room view alongside Chat, Polls, Poker, Timer
+- **Code Splitting**: TipTap + ProseMirror in separate lazy-loaded chunk to keep main bundle fast
+- **Editor Styling**: Dark theme prose styles matching the design system — headings, lists, code blocks, blockquotes
+
+### Architecture
+- TipTap v3 with `@tiptap/extension-collaboration` binding to Yjs XmlFragment
+- StarterKit with undoRedo disabled (Yjs handles history)
+- Awareness protocol carries cursor name/color for each peer
+- Manual chunk splitting: TipTap/ProseMirror in `tiptap` chunk, loaded only when Notes tab is active
+
+### Build Stats
+- Main JS: 104KB (37KB gzipped) — core app without notepad
+- TipTap chunk: 465KB (148KB gzipped) — lazy loaded
+- CSS: 24KB (5KB gzipped)
+- Tests: 25 passed, 0 failed
+
+### Tasks Completed
+T-020, T-021, T-022, T-023
+
+---
+
 ## M2 — Core Features (2026-04-09)
 
 **Branch:** `feature/backend-expert/T-013-m2-core-features` -> `develop`
