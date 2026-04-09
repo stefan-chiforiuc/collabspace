@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import Input from './ui/Input';
@@ -8,11 +8,20 @@ import { getDisplayName, setDisplayName } from '../lib/storage';
 export default function Landing() {
   const [name, setName] = createSignal(getDisplayName() ?? '');
   const [joinCode, setJoinCode] = createSignal('');
+  const [password, setPassword] = createSignal('');
+  const [showAdvanced, setShowAdvanced] = createSignal(false);
 
   const handleCreate = () => {
     if (name().trim()) setDisplayName(name().trim());
     const code = generateRoomCode();
-    window.location.hash = `/room/${code}`;
+    const pw = password().trim();
+    // Pass password via hash fragment: #/room/code?pw=base64
+    if (pw) {
+      const encoded = btoa(pw);
+      window.location.hash = `/room/${code}?pw=${encoded}`;
+    } else {
+      window.location.hash = `/room/${code}`;
+    }
   };
 
   const handleJoin = () => {
@@ -44,11 +53,30 @@ export default function Landing() {
           value={name()}
           onInput={(e) => setName(e.currentTarget.value)}
           maxLength={30}
+          autofocus
         />
 
-        <Button onClick={handleCreate} size="lg" class="w-full">
-          Create Room
-        </Button>
+        <div class="space-y-2">
+          <Button onClick={handleCreate} size="lg" class="w-full">
+            Create Room
+          </Button>
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced())}
+            class="text-xs text-surface-500 hover:text-surface-300 cursor-pointer w-full text-center"
+          >
+            {showAdvanced() ? 'Hide options' : 'Room options...'}
+          </button>
+        </div>
+
+        <Show when={showAdvanced()}>
+          <Input
+            label="Room password (optional)"
+            placeholder="Leave empty for open room"
+            value={password()}
+            onInput={(e) => setPassword(e.currentTarget.value)}
+            maxLength={64}
+          />
+        </Show>
 
         <div class="relative">
           <div class="absolute inset-0 flex items-center">

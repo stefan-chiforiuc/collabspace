@@ -4,11 +4,12 @@ import { createYDoc } from '../lib/yjs-doc';
 import { TrysteroProvider } from '../lib/yjs-sync';
 import { setLocalAwareness, getParticipantList, assignColor } from '../lib/participants';
 import { sendChatMessage, sendSystemMessage, getChatMessages } from '../lib/chat';
+import { setRoomPassword } from '../lib/room-password';
 import { getDisplayName } from '../lib/storage';
 import { MAX_PARTICIPANTS } from '../lib/constants';
 import type { Participant, ChatMessage } from '../lib/types';
 
-export function useRoom(roomCode: string) {
+export function useRoom(roomCode: string, password?: string) {
   const [participants, setParticipants] = createSignal<Participant[]>([]);
   const [messages, setMessages] = createSignal<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = createSignal(false);
@@ -64,6 +65,11 @@ export function useRoom(roomCode: string) {
     }
     sendSystemMessage(doc, `A participant left`);
   });
+
+  // Set room password if provided (creator flow)
+  if (password) {
+    setRoomPassword(doc, password);
+  }
 
   // Mark connected once awareness is set
   setIsConnected(true);
