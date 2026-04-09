@@ -141,6 +141,18 @@ hotfix/*      ← urgent fixes from main
 - `.claude/memory-db/vectra-data/` — Vector memory database (auto-managed)
 - `.claude/memory-db/git-flow-helper.sh` — Git flow automation script
 
+## Release Notes (MANDATORY)
+
+**Every commit or merge to `develop` or `main` MUST include an update to `release-notes.md`.**
+
+When updating release notes, include:
+- **What's New** — bullet list of features, fixes, and changes
+- **Build Stats** — JS size, CSS size, test counts
+- **Tasks Completed** — task IDs that were finished
+- Any bug fixes, new commands, architecture changes, or deployment info
+
+This ensures a complete audit trail of all work done on the project.
+
 ## Core Principles
 1. **Zero custom servers** — Trystero + free public infrastructure only
 2. **Static deployment** — Push to GitHub, done forever

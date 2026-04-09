@@ -2,6 +2,58 @@
 
 ---
 
+## M4+ — P2P Sync Fix, PR Workflow, E2E Testing, Docker (2026-04-09)
+
+### What's New
+- **P2P Sync Fixed**: Bidirectional Yjs sync — both peers now send sync step 1 with retry logic. Second person joining a room now correctly receives all shared state (chat, polls, poker, timer, notepad)
+- **Password Gate**: Joiners are now prompted for the room password before seeing room content. Wrong password is rejected, correct password grants access
+- **Creator Flow Fix**: Room creators without a password no longer get stuck on "Connecting to room..." screen
+- **PR-Based Workflow**: All features now go through GitHub Pull Requests reviewed by PM + Architect agents before merging. No more direct merges to `develop` or `main`
+- **GitHub Actions CI**: PR checks workflow runs type check, tests, and build on every pull request
+- **Docker Support**: Multi-stage Dockerfile (Node build + nginx serve), docker-compose, nginx config with SPA fallback and security headers
+- **E2E Clone Agent Tests**: Playwright tests with two independent browser contexts (Alice and Bob) simulating real P2P collaboration across all features
+- **Live App Testing**: New `/test-live` command to verify the GitHub Pages deployment
+
+### P2P Bugs Fixed
+| Bug | Fix |
+|-----|-----|
+| Only one side sends sync step 1 | Both peers now initiate sync (bidirectional) |
+| Data channel not ready when sync fires | Retry logic (up to 5 attempts with backoff) |
+| Joiner's doc pre-writes meta | Only creator writes initial meta; joiners sync |
+| Peer name lookup uses wrong ID space | Use awareness participant list instead of peerId |
+| Double onCleanup calls leave() twice | Removed duplicate from RoomView |
+| No password gate for joiners | PasswordGate component with hash verification |
+| Creator without password stuck on "Connecting" | Added creator flag to URL hash |
+
+### New Commands
+- `/pr-review` — PM + Architect review a Pull Request (approve/reject/merge)
+- `/test-live` — Test the live GitHub Pages deployment
+
+### E2E Test Suite (10 tests, all passing)
+- App loads and landing page renders
+- Room creation with all tabs visible
+- Alice & Bob P2P connection via Nostr signaling
+- Chat messages sync bidirectionally
+- Poll creation syncs between peers
+- Timer sync between peers
+- Notepad collaborative editing via Yjs CRDT
+- Planning poker round syncs
+- Password-protected room flow (wrong/correct password)
+
+### Build Stats
+- Main JS: 110KB (38KB gzipped)
+- TipTap chunk: 465KB (148KB gzipped)
+- CSS: 26KB (5KB gzipped)
+- Unit tests: 32 passed, 0 failed
+- E2E tests: 10 passed, 0 failed
+
+### Deployment
+- **Live URL**: https://stefan-chiforiuc.github.io/collabspace/
+- **Docker**: `docker compose up --build` → http://localhost:8080
+- **GitHub repo**: https://github.com/stefan-chiforiuc/collabspace
+
+---
+
 ## M3 — Collaborative Editing (2026-04-09)
 
 **Branch:** `feature/backend-expert/T-020-m3-collaborative-editing` -> `develop`
