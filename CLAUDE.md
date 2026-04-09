@@ -25,6 +25,7 @@ This project uses a multi-agent workflow. Agents are in `.claude/agents/`:
 | `frontend-expert` | UI components, responsive layout, accessibility |
 | `uiux-designer` | Design system, visual QA, UX flows |
 | `qa-agent` | Testing, bug reports, performance/security testing |
+| `code-reviewer` | Reviews code, runs QA pipeline, auto-commits when all checks pass |
 
 ## Memory System (Local Vector DB)
 All agents share a **semantic memory database** at `.claude/memory-db/`. It uses:
@@ -65,28 +66,77 @@ node .claude/memory-db/memory-store.mjs export --format json
 - **When making decisions**: add a `decision` memory with rationale
 - **When resolving issues**: update the memory status to `resolved`
 
-## Key Commands (`.claude/commands/`)
-- `/task-create` — Create a task
-- `/task-update` — Update task status
-- `/task-list` — View task board
-- `/assign` — Assign task to agent
-- `/consult-challenger` — Challenge a decision
-- `/status-report` — Full project status
-- `/release-notes` — Update release notes
-- `/security-scan` — Scan for credentials/vulnerabilities
-- `/arch-review` — Architecture compliance check
-- `/design-review` — Visual QA review
-- `/run-tests` — Execute test suite
-- `/bug-report` — File a bug
-- `/memory-add` — Store a memory in the vector DB
-- `/memory-search` — Semantic search across memories
-- `/memory-summary` — Memory database statistics
+## Git Flow (MANDATORY for all agents)
+
+All agents MUST use git-flow. Never commit directly to `main` or `develop`.
+
+### Branch Model
+```
+main          ← production releases only
+develop       ← integration branch, all features merge here
+feature/*     ← agent work branches: feature/<agent>/<task-id>-<desc>
+release/*     ← release prep branches
+hotfix/*      ← urgent fixes from main
+```
+
+### Agent Workflow
+```bash
+# 1. Start a feature branch
+bash .claude/memory-db/git-flow-helper.sh start-feature <agent> <task-id> "<desc>"
+
+# 2. Work, commit frequently on the feature branch
+
+# 3. Sync with develop before finishing
+bash .claude/memory-db/git-flow-helper.sh sync
+
+# 4. Finish feature (runs ALL pre-merge checks automatically)
+bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
+```
+
+### Pre-Merge Checks (run automatically on every merge)
+1. **Conflict detection** — trial merge to find conflicts
+2. **Credential scan** — search changed files for secrets/tokens/keys
+3. **Lint** — run linter if configured
+4. **Tests** — run test suite if configured
+5. **Build** — verify the project builds
+
+If ANY check fails, the merge is **aborted** and must be fixed first.
+
+### Git Flow Commands
+- `/git-start` — Create feature branch for an agent + task
+- `/git-finish` — Finish feature with pre-merge validation
+- `/git-sync` — Rebase current branch onto develop
+- `/git-status` — Show all branches and working tree
+- `/git-release` — Start/finish release branches
+- `/resolve-conflicts` — Intelligent conflict resolution (reads both sides, checks requirements, validates result)
+- `/pre-merge-check` — Run validation suite manually
+
+### Conflict Resolution Rules
+- NEVER delete functionality — keep additions from both sides
+- Combine imports, keep all new functions, merge config carefully
+- Validate with tests after resolving
+- Escalate to PM if >5 files conflict or architecture-critical files are involved
+
+## All Commands (`.claude/commands/`)
+
+**Task Management:**
+`/task-create`, `/task-update`, `/task-list`, `/assign`, `/status-report`, `/release-notes`
+
+**Git Flow:**
+`/git-start`, `/git-finish`, `/git-sync`, `/git-status`, `/git-release`, `/resolve-conflicts`, `/pre-merge-check`
+
+**Review & Testing:**
+`/review-and-commit`, `/security-scan`, `/arch-review`, `/design-review`, `/run-tests`, `/bug-report`, `/consult-challenger`
+
+**Memory:**
+`/memory-add`, `/memory-search`, `/memory-summary`
 
 ## Project Files
 - `tasks.md` — Task board with status tracking
 - `release-notes.md` — Completed work log
 - `requirements-v2.md` — Full project requirements (source of truth)
 - `.claude/memory-db/vectra-data/` — Vector memory database (auto-managed)
+- `.claude/memory-db/git-flow-helper.sh` — Git flow automation script
 
 ## Core Principles
 1. **Zero custom servers** — Trystero + free public infrastructure only
