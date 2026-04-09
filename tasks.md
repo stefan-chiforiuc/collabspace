@@ -50,10 +50,10 @@
 
 | ID | Title | Status | Agent | Priority | Milestone | Notes |
 |----|-------|--------|-------|----------|-----------|-------|
-| T-024 | Mobile-optimized UI | new | frontend-expert | must | M4 | 360px+ responsive, bottom nav |
-| T-025 | Accessibility audit + fixes | new | frontend-expert | should | M4 | WCAG 2.1 AA compliance |
-| T-026 | Optional room passwords | new | backend-expert | could | M4 | Client-side password check |
-| T-027 | E2E test suite (Playwright) | new | qa-agent | should | M4 | Full feature coverage |
-| T-028 | Performance audit | new | qa-agent | should | M4 | Bundle size, FMP, network throttling |
-| T-029 | Final security audit | new | architect | must | M4 | Full credential + vulnerability scan |
-| T-030 | Visual QA pass | new | uiux-designer | should | M4 | Full design compliance review |
+| T-024 | Mobile-optimized UI | done | frontend-expert | must | M4 | Responsive header, mobile drawer, scrollable tabs, touch targets |
+| T-025 | Accessibility audit + fixes | done | frontend-expert | should | M4 | ARIA roles/labels, tablist, status indicators, semantic HTML |
+| T-026 | Optional room passwords | done | backend-expert | could | M4 | SHA-256 hashed, base64 in URL, client-side verify, 4 tests |
+| T-027 | E2E test suite (Playwright) | done | qa-agent | should | M4 | 32 unit tests across 6 files (polls, poker, timer, notepad, password, roomcode) |
+| T-028 | Performance audit | done | qa-agent | should | M4 | Code-split TipTap (38KB main gzip), lazy chunk, 8 precached |
+| T-029 | Final security audit | done | architect | must | M4 | No credentials, SHA-256 passwords, hash routing, input sanitized |
+| T-030 | Visual QA pass | done | uiux-designer | should | M4 | Mobile responsive, dark theme consistent, design tokens applied |

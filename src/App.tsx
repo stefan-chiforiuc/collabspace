@@ -12,7 +12,10 @@ export default function App() {
         <Landing />
       </Match>
       <Match when={route().page === 'room'}>
-        <RoomView roomCode={(route() as { page: 'room'; roomCode: string }).roomCode} />
+        {(() => {
+          const r = route() as { page: 'room'; roomCode: string; password?: string };
+          return <RoomView roomCode={r.roomCode} password={r.password} />;
+        })()}
       </Match>
     </Switch>
   );
