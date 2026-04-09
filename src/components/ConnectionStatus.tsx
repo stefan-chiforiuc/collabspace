@@ -33,24 +33,39 @@ export default function ConnectionStatusPanel(props: ConnectionStatusProps) {
 
       {/* Strategy Summary */}
       <div class="px-3 py-2 space-y-1.5 border-b border-surface-700/50">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class={`w-1.5 h-1.5 rounded-full ${mqttOk() ? 'bg-success' : 'bg-error'}`} />
-            <span class="text-xs text-surface-300 font-medium">MQTT</span>
+        <Show when={props.status.mqtt.enabled}>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class={`w-1.5 h-1.5 rounded-full ${mqttOk() ? 'bg-success' : 'bg-error'}`} />
+              <span class="text-xs text-surface-300 font-medium">MQTT</span>
+            </div>
+            <span class="text-xs text-surface-500">
+              {props.status.mqtt.connected}/{props.status.mqtt.total} brokers
+            </span>
           </div>
-          <span class="text-xs text-surface-500">
-            {props.status.mqtt.connected}/{props.status.mqtt.total} brokers
-          </span>
-        </div>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class={`w-1.5 h-1.5 rounded-full ${torrentOk() ? 'bg-success' : 'bg-error'}`} />
-            <span class="text-xs text-surface-300 font-medium">BitTorrent</span>
+        </Show>
+        <Show when={props.status.torrent.enabled}>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class={`w-1.5 h-1.5 rounded-full ${torrentOk() ? 'bg-success' : 'bg-error'}`} />
+              <span class="text-xs text-surface-300 font-medium">BitTorrent</span>
+            </div>
+            <span class="text-xs text-surface-500">
+              {props.status.torrent.connected}/{props.status.torrent.total} trackers
+            </span>
           </div>
-          <span class="text-xs text-surface-500">
-            {props.status.torrent.connected}/{props.status.torrent.total} trackers
-          </span>
-        </div>
+        </Show>
+        <Show when={props.status.turn}>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-purple-400" />
+              <span class="text-xs text-surface-300 font-medium">TURN Relay</span>
+            </div>
+            <span class="text-[10px] px-1 py-0.5 rounded bg-purple-500/15 text-purple-400 font-medium">
+              {props.status.turn!.mode === 'open-relay' ? 'Open Relay' : `Custom`}
+            </span>
+          </div>
+        </Show>
         <div class="flex items-center justify-between pt-0.5">
           <span class="text-xs text-surface-400">Peers</span>
           <span class="text-xs font-mono text-primary-400">{props.status.peerCount}</span>

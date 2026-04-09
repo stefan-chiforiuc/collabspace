@@ -2,6 +2,31 @@
 
 ---
 
+## Connection Settings, TURN Support, and Improved Join Flow (2026-04-09)
+
+### What's New
+- **Configurable signaling strategies**: Choose which signaling methods to use (MQTT, BitTorrent, or both). Add/remove servers for each strategy
+- **TURN relay support**: Auto mode uses Metered Open Relay (free, TURNS on TCP 443 for corporate firewalls). Custom mode for organizations with their own coturn server. Disable option for local networks
+- **HMAC credential generation**: Client-side HMAC-SHA1 credentials via Web Crypto API — no backend needed
+- **Improved join flow**: Join form now includes name field and optional password. "Room has a password?" expands to show password field
+- **Connection failure recovery**: After 30 seconds without a peer connection, shows error screen with "Try Again", "Connection Settings", and "Create New Room" options
+- **Live reconnection**: Change connection settings while in a room — "Apply & Reconnect" tears down the transport and rebuilds with new config, preserving the Yjs doc and chat history
+- **Settings gear icon**: Always visible in the room header for quick access to connection settings
+- **Connection Status panel**: Now shows TURN relay status (Open Relay / Custom) with purple badge alongside MQTT/BitTorrent relay details
+
+### New Files
+- `src/lib/connection-settings.ts` — ConnectionSettings type, defaults, localStorage persistence
+- `src/lib/turn-config.ts` — HMAC credential generation for Metered Open Relay, TURN server builder
+- `src/components/ConnectionSettingsPanel.tsx` — Full settings UI with toggles, server lists, TURN config
+
+### Build Stats
+- Main JS: 491KB (151KB gzipped)
+- TipTap chunk: 465KB (148KB gzipped)
+- CSS: 31KB (6KB gzipped)
+- Unit tests: 32 passed, 0 failed
+
+---
+
 ## Connection Status Panel (2026-04-09)
 
 ### What's New
