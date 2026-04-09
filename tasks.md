@@ -29,13 +29,13 @@
 
 | ID | Title | Status | Agent | Priority | Milestone | Notes |
 |----|-------|--------|-------|----------|-----------|-------|
-| T-013 | Polls — backend logic (create/vote/close) | new | backend-expert | must | M2 | Y.Map operations per FR-03 |
-| T-014 | Polls — UI component | new | frontend-expert | must | M2 | Creation form, voting, results bar chart |
-| T-015 | Planning Poker — backend logic | new | backend-expert | must | M2 | Vote/reveal/reset, card sets, consensus calc |
-| T-016 | Planning Poker — UI component | new | frontend-expert | must | M2 | Card selection, reveal animation, results |
-| T-017 | Shared Timer — backend + UI | new | backend-expert | should | M2 | Synced countdown, presets, alerts |
-| T-018 | Quick Reactions + Raise Hand | new | frontend-expert | should | M2 | Transient reactions, persistent raise hand |
-| T-019 | Polls + Poker design specs | new | uiux-designer | must | M2 | Detailed component designs |
+| T-013 | Polls — backend logic (create/vote/close) | done | backend-expert | must | M2 | Y.Map ops, single/multi choice, results calc, 6 tests |
+| T-014 | Polls — UI component | done | frontend-expert | must | M2 | Create form, voting, bar chart results, close poll |
+| T-015 | Planning Poker — backend logic | done | backend-expert | must | M2 | Vote/reveal/reset, 3 card sets, consensus calc, 8 tests |
+| T-016 | Planning Poker — UI component | done | frontend-expert | must | M2 | Card selection, vote status, reveal, results summary |
+| T-017 | Shared Timer — backend + UI | done | backend-expert | should | M2 | Synced countdown, 5 presets, pause/resume, expiry alert, 7 tests |
+| T-018 | Quick Reactions + Raise Hand | done | frontend-expert | should | M2 | 8 emoji reactions, raise hand toggle, awareness-based |
+| T-019 | Polls + Poker design specs | done | uiux-designer | must | M2 | Integrated into component designs, follows design system |
 
 ## Milestone M3 — Collaborative Editing
 
