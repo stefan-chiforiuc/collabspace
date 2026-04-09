@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import type { RoomMeta, ChatMessage } from './types';
+import type { RoomMeta, ChatMessage, Reaction } from './types';
 
 export function createYDoc(meta: RoomMeta): Y.Doc {
   const doc = new Y.Doc();
@@ -15,6 +15,7 @@ export function createYDoc(meta: RoomMeta): Y.Doc {
   doc.getMap('polls');
   doc.getMap('poker');
   doc.getMap('timer');
+  doc.getArray<Reaction>('reactions');
 
   return doc;
 }
@@ -25,4 +26,20 @@ export function getChat(doc: Y.Doc): Y.Array<ChatMessage> {
 
 export function getMeta(doc: Y.Doc): Y.Map<unknown> {
   return doc.getMap('meta');
+}
+
+export function getPolls(doc: Y.Doc): Y.Map<unknown> {
+  return doc.getMap('polls');
+}
+
+export function getPoker(doc: Y.Doc): Y.Map<unknown> {
+  return doc.getMap('poker');
+}
+
+export function getTimer(doc: Y.Doc): Y.Map<unknown> {
+  return doc.getMap('timer');
+}
+
+export function getReactions(doc: Y.Doc): Y.Array<Reaction> {
+  return doc.getArray<Reaction>('reactions');
 }

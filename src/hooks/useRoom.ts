@@ -81,6 +81,9 @@ export function useRoom(roomCode: string) {
     messages,
     isConnected,
     localPeerId,
+    localName: name,
+    doc,
+    awareness: provider.awareness,
     sendMessage: (text: string) => {
       sendChatMessage(doc, text, String(doc.clientID), name);
     },
