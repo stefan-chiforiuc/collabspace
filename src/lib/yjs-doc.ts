@@ -1,14 +1,17 @@
 import * as Y from 'yjs';
 import type { RoomMeta, ChatMessage, Reaction } from './types';
 
-export function createYDoc(meta: RoomMeta): Y.Doc {
+export function createYDoc(meta: RoomMeta, isCreator: boolean): Y.Doc {
   const doc = new Y.Doc();
 
-  const metaMap = doc.getMap('meta');
-  metaMap.set('roomCode', meta.roomCode);
-  metaMap.set('roomName', meta.roomName);
-  metaMap.set('createdAt', meta.createdAt);
-  metaMap.set('maxParticipants', meta.settings.maxParticipants);
+  // Only the room creator writes initial meta — joiners receive it via Yjs sync
+  if (isCreator) {
+    const metaMap = doc.getMap('meta');
+    metaMap.set('roomCode', meta.roomCode);
+    metaMap.set('roomName', meta.roomName);
+    metaMap.set('createdAt', meta.createdAt);
+    metaMap.set('maxParticipants', meta.settings.maxParticipants);
+  }
 
   // Declare structures (lazy init — just accessing them registers the type)
   doc.getArray<ChatMessage>('chat');

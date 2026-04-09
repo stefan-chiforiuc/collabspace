@@ -85,17 +85,9 @@ This creates: `feature/<agent>/<task-id>-<description>`
 3. Commit frequently with clear messages.
 
 ### Finishing Work
-1. When done, sync with develop first:
-```bash
-bash .claude/memory-db/git-flow-helper.sh sync
-```
-2. Then finish the feature (runs pre-merge checks automatically):
-```bash
-bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
-```
-3. Pre-merge validation runs: conflict check, credential scan, lint, tests, build.
-4. If checks fail, fix issues before retrying.
-5. If merge conflicts occur, use `/resolve-conflicts` to resolve them safely.
+1. Run `/review-and-commit` — this runs QA checks, commits, and creates a PR.
+2. The PM + Architect will review the PR via `/pr-review`.
+3. If approved, the PR is merged to `develop`.
 
 ### Memory Integration
 - Before starting: `node .claude/memory-db/memory-store.mjs search --query "<what you're working on>"`

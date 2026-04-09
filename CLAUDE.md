@@ -79,36 +79,34 @@ release/*     ← release prep branches
 hotfix/*      ← urgent fixes from main
 ```
 
-### Agent Workflow
-```bash
-# 1. Start a feature branch
-bash .claude/memory-db/git-flow-helper.sh start-feature <agent> <task-id> "<desc>"
-
-# 2. Work, commit frequently on the feature branch
-
-# 3. Sync with develop before finishing
-bash .claude/memory-db/git-flow-helper.sh sync
-
-# 4. Finish feature (runs ALL pre-merge checks automatically)
-bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
+### Agent Workflow (PR-Based)
+```
+1. /git-start <agent> <task-id> "<desc>"     — Create feature branch
+2. Work, commit frequently on the feature branch
+3. /review-and-commit                         — Run QA checks, commit, create PR
+4. /pr-review <PR-number>                     — PM + Architect review the PR
+5. If approved → PR merged to develop
+6. /git-release start <version>               — Create release branch
+7. /git-release finish <version>              — Merge to main (triggers deploy)
+8. /test-live                                 — Verify the live deployment
 ```
 
-### Pre-Merge Checks (run automatically on every merge)
-1. **Conflict detection** — trial merge to find conflicts
-2. **Credential scan** — search changed files for secrets/tokens/keys
-3. **Lint** — run linter if configured
-4. **Tests** — run test suite if configured
-5. **Build** — verify the project builds
+**Important:** Features are NEVER merged directly. All merges happen via reviewed Pull Requests.
 
-If ANY check fails, the merge is **aborted** and must be fixed first.
+### PR Checks (run automatically via GitHub Actions)
+1. **Type check** — `npx tsc -b`
+2. **Tests** — `npx vitest run`
+3. **Build** — `npm run build`
+4. **Bundle size** — check against 200KB budget
 
 ### Git Flow Commands
 - `/git-start` — Create feature branch for an agent + task
-- `/git-finish` — Finish feature with pre-merge validation
+- `/git-finish` — Push branch and create a Pull Request
 - `/git-sync` — Rebase current branch onto develop
 - `/git-status` — Show all branches and working tree
 - `/git-release` — Start/finish release branches
-- `/resolve-conflicts` — Intelligent conflict resolution (reads both sides, checks requirements, validates result)
+- `/pr-review` — PM + Architect review a PR (approve/reject/merge)
+- `/resolve-conflicts` — Intelligent conflict resolution
 - `/pre-merge-check` — Run validation suite manually
 
 ### Conflict Resolution Rules
@@ -125,8 +123,13 @@ If ANY check fails, the merge is **aborted** and must be fixed first.
 **Git Flow:**
 `/git-start`, `/git-finish`, `/git-sync`, `/git-status`, `/git-release`, `/resolve-conflicts`, `/pre-merge-check`
 
+**Deployment:**
+- Live app: `https://stefan-chiforiuc.github.io/collabspace/`
+- Deploy triggers on push to `main` via `.github/workflows/deploy.yml`
+- PR checks run on every PR via `.github/workflows/pr-checks.yml`
+
 **Review & Testing:**
-`/review-and-commit`, `/security-scan`, `/arch-review`, `/design-review`, `/run-tests`, `/bug-report`, `/consult-challenger`
+`/review-and-commit`, `/pr-review`, `/security-scan`, `/arch-review`, `/design-review`, `/run-tests`, `/test-live`, `/bug-report`, `/consult-challenger`
 
 **Memory:**
 `/memory-add`, `/memory-search`, `/memory-summary`
