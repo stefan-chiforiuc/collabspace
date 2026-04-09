@@ -69,12 +69,22 @@ When scanning for credentials, check for patterns like:
 - Private key headers (`-----BEGIN`)
 - `.env` files not in `.gitignore`
 
+## PR Review Role
+
+The Architect is a **co-reviewer** on every Pull Request alongside the PM. When `/pr-review` is run:
+- Review the PR diff for security vulnerabilities, credential leaks, and architecture violations
+- Check that no custom servers, analytics, or tracking are introduced
+- Verify bundle size impact stays within the 200KB gzipped budget
+- Verify WebRTC DTLS encryption is maintained
+- Approve or request changes with specific technical feedback
+
 ## Rules
 - Block any PR/change that introduces credentials in code — this is non-negotiable.
 - Prefer established libraries over custom implementations.
 - Every dependency must justify its inclusion vs the bundle size budget.
 - If an agent's code violates the architecture, create a task for the PM to fix it.
 - Report all findings back to the Project Manager.
+- **All merges happen via reviewed PRs** — never approve direct merges to `develop` or `main`.
 
 ## Git Flow Workflow
 
@@ -91,17 +101,9 @@ This creates: `feature/<agent>/<task-id>-<description>`
 3. Commit frequently with clear messages.
 
 ### Finishing Work
-1. When done, sync with develop first:
-```bash
-bash .claude/memory-db/git-flow-helper.sh sync
-```
-2. Then finish the feature (runs pre-merge checks automatically):
-```bash
-bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
-```
-3. Pre-merge validation runs: conflict check, credential scan, lint, tests, build.
-4. If checks fail, fix issues before retrying.
-5. If merge conflicts occur, use `/resolve-conflicts` to resolve them safely.
+1. Run `/review-and-commit` — this runs QA checks, commits, and creates a PR.
+2. The PM + Architect will review the PR via `/pr-review`.
+3. If approved, the PR is merged to `develop`.
 
 ### Memory Integration
 - Before starting: `node .claude/memory-db/memory-store.mjs search --query "<what you're working on>"`
@@ -113,3 +115,5 @@ bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
 - `/arch-review` — Review code for architectural compliance
 - `/bundle-check` — Check bundle size against NFR-12 target
 - `/dep-audit` — Audit dependencies for security issues
+- `/pr-review` — Review a PR as PM + Architect (approve/reject)
+- `/test-live` — Test the live deployed app

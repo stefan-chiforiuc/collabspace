@@ -10,7 +10,7 @@ function makeDoc() {
     roomName: 'Test Room',
     createdAt: Date.now(),
     settings: { maxParticipants: 6 },
-  });
+  }, true);
 }
 
 describe('Polls', () => {

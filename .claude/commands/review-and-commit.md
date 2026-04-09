@@ -1,6 +1,8 @@
-# /review-and-commit — Full Review Pipeline + Auto-Commit
+# /review-and-commit — Full Review Pipeline + Auto-Commit + Create PR
 
-Review all changes on the current feature branch, run QA checks, fix issues, and commit + merge to develop if everything passes.
+Review all changes on the current feature branch, run QA checks, fix issues, commit, and create a Pull Request for PM + Architect review.
+
+**Important:** This command no longer merges directly. It creates a PR that must be reviewed via `/pr-review`.
 
 ## Arguments
 - `$ARGUMENTS` — Optional: commit message override or "dry-run" to review without committing
@@ -70,28 +72,44 @@ git add <file1> <file2> ...
 git commit -m "<message>"
 ```
 
-### Step 8: Pre-Merge Check
-```bash
-bash .claude/memory-db/git-flow-helper.sh sync
-bash .claude/memory-db/git-flow-helper.sh pre-merge-check
-```
-If pre-merge fails, fix and retry.
-
-### Step 9: Finish Feature
+### Step 8: Create Pull Request
 If `$ARGUMENTS` is NOT "dry-run":
+
+1. Push the branch:
 ```bash
-bash .claude/memory-db/git-flow-helper.sh finish-feature $(git branch --show-current)
+export PATH="$PATH:/c/Program Files/GitHub CLI"
+git push -u origin $(git branch --show-current)
 ```
 
-### Step 10: Update Project Tracking
-1. Update `tasks.md` — set completed tasks to `done`
-2. Update `release-notes.md` — add entry for what was delivered
-3. Log to memory:
+2. Create a PR targeting `develop`:
 ```bash
-node .claude/memory-db/memory-store.mjs add --type task --agent code-reviewer --content "Reviewed and merged: <summary>. Types: OK. Tests: N passed. Build: OK. Bundle: XKB gzipped." --summary "Code review: <branch>" --tags "review,merge,<milestone>"
+export PATH="$PATH:/c/Program Files/GitHub CLI"
+gh pr create --base develop --title "<Task-ID>: <Short description>" --body "$(cat <<'PREOF'
+## Summary
+- <What was built/changed>
+- Task: <Task-ID>
+
+## Review Pipeline Results
+- **Type check:** OK
+- **Tests:** N passed
+- **Security:** Clean
+- **Build:** OK
+- **Bundle size:** XKB gzipped
+
+## Changes
+- <List of key changes>
+PREOF
+)"
 ```
 
-### Step 11: Report
+### Step 9: Update Project Tracking
+1. Update `tasks.md` — set task status to `review`
+2. Log to memory:
+```bash
+node .claude/memory-db/memory-store.mjs add --type task --agent code-reviewer --content "Reviewed and created PR for: <summary>. Types: OK. Tests: N passed. Build: OK. Bundle: XKB gzipped." --summary "Code review: <branch>" --tags "review,pr,<milestone>"
+```
+
+### Step 10: Report
 Output a summary:
 ```
 ## Review Complete
@@ -104,13 +122,15 @@ Output a summary:
 **Build:** OK / Failed
 **Bundle size:** XKB gzipped (budget: 200KB)
 **Committed:** Yes (sha) / No (dry-run) / No (failures)
-**Merged to develop:** Yes / No
+**PR Created:** #<number> (<url>) / No (dry-run)
+
+Next step: Run `/pr-review <PR-number>` for PM + Architect review.
 
 ### Issues Found
 - ...
 
-### Tasks Completed
-- T-XXX: ...
+### Tasks Updated
+- T-XXX: status → review
 ```
 
 $ARGUMENTS

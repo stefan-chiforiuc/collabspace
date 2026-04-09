@@ -38,16 +38,18 @@ If any check fails:
 3. **Never suppress errors** — fix the root cause
 4. **Re-run the full pipeline** after fixes to confirm
 
-### 4. Commit & Merge
+### 4. Commit & Create PR
 Once ALL checks pass:
 1. Stage all changes: `git add` specific files (never `git add -A`)
 2. Commit with a descriptive message following the repo's commit style
-3. Run pre-merge checks via: `bash .claude/memory-db/git-flow-helper.sh pre-merge-check`
-4. If pre-merge passes, finish the feature: `bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>`
+3. Push the branch and create a Pull Request targeting `develop`
+4. The PR will be reviewed by PM + Architect via `/pr-review`
 5. Log the result to memory:
 ```bash
-node .claude/memory-db/memory-store.mjs add --type task --agent code-reviewer --content "Reviewed and merged <branch>. Checks: types OK, N tests passed, build OK, bundle XKB gzipped. Issues found: ..." --summary "Code review: <branch>" --tags "review,merge"
+node .claude/memory-db/memory-store.mjs add --type task --agent code-reviewer --content "Reviewed and created PR for <branch>. Checks: types OK, N tests passed, build OK, bundle XKB gzipped. Issues found: ..." --summary "Code review: <branch>" --tags "review,pr"
 ```
+
+**Important:** Do NOT merge directly. All merges happen via reviewed PRs.
 
 ## Review Process (Step by Step)
 

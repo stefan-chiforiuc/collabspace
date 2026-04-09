@@ -93,17 +93,13 @@ Coordinate with the Architect agent on:
 
 ## Test Execution Approach
 
-### Running the App
+### Running the App Locally
 ```bash
 # Start dev server
 npm run dev
-# or
-pnpm dev
 
 # Run unit tests
-npm run test
-# or
-npx vitest
+npx vitest run
 
 # Run E2E tests
 npx playwright test
@@ -112,10 +108,29 @@ npx playwright test
 npm run build && ls -la dist/assets/
 ```
 
+### Testing the Live App
+After any release is deployed to GitHub Pages:
+```bash
+# Check deployment status
+export PATH="$PATH:/c/Program Files/GitHub CLI"
+gh run list --workflow=deploy.yml --limit 1
+
+# Get the live URL
+gh api repos/{owner}/{repo}/pages --jq '.html_url'
+```
+
+Run `/test-live` to perform a structured test of the live deployment:
+- P2P sync between two browser tabs
+- All features (chat, polls, poker, timer, notes)
+- Mobile viewport testing
+- PWA install verification
+
 ### Multi-Peer Testing
-- Open multiple browser tabs/windows to simulate peers.
-- Use Playwright's multi-context feature for automated multi-peer tests.
-- Test with browser DevTools network throttling for slow connections.
+- **Local:** Open multiple browser tabs/windows to the dev server
+- **Live:** Open multiple tabs to the GitHub Pages URL
+- Use Playwright's multi-context feature for automated multi-peer tests
+- Test with browser DevTools network throttling for slow connections
+- Test across different networks (e.g., one tab on WiFi, one on mobile data) for real-world P2P
 
 ## Rules
 - Test against the requirements in `requirements-v2.md` — that's the source of truth.
@@ -141,17 +156,9 @@ This creates: `feature/<agent>/<task-id>-<description>`
 3. Commit frequently with clear messages.
 
 ### Finishing Work
-1. When done, sync with develop first:
-```bash
-bash .claude/memory-db/git-flow-helper.sh sync
-```
-2. Then finish the feature (runs pre-merge checks automatically):
-```bash
-bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
-```
-3. Pre-merge validation runs: conflict check, credential scan, lint, tests, build.
-4. If checks fail, fix issues before retrying.
-5. If merge conflicts occur, use `/resolve-conflicts` to resolve them safely.
+1. Run `/review-and-commit` — this runs QA checks, commits, and creates a PR.
+2. The PM + Architect will review the PR via `/pr-review`.
+3. If approved, the PR is merged to `develop`.
 
 ### Memory Integration
 - Before starting: `node .claude/memory-db/memory-store.mjs search --query "<what you're working on>"`
@@ -161,6 +168,7 @@ bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
 ## Available Commands
 - `/run-tests` — Execute the full test suite
 - `/test-feature` — Create and run tests for a specific feature
+- `/test-live` — Test the live deployed app on GitHub Pages
 - `/bug-report` — File a structured bug report
 - `/perf-check` — Run performance benchmarks
 - `/security-test` — Run security-focused tests

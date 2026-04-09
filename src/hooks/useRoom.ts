@@ -15,23 +15,27 @@ export function useRoom(roomCode: string, password?: string) {
   const [isConnected, setIsConnected] = createSignal(false);
   const [localPeerId, setLocalPeerId] = createSignal('');
 
-  // Create Yjs doc
+  // Only the creator (who has a password) writes initial meta
+  const isCreator = !!password;
   const doc = createYDoc({
     roomCode,
     roomName: roomCode,
     createdAt: Date.now(),
     settings: { maxParticipants: MAX_PARTICIPANTS },
-  });
+  }, isCreator);
 
   // Create Trystero room
   const trystero: TrysteroRoom = createTrysteroRoom(roomCode);
 
+  // Set local user in awareness BEFORE creating provider,
+  // so the awareness snapshot sent to peers includes our info
+  const name = getDisplayName() || 'Anonymous';
+  const colorIndex = Math.floor(Math.random() * 6);
+
   // Bridge Yjs sync over Trystero
   const provider = new TrysteroProvider(doc, trystero);
 
-  // Set local user in awareness
-  const name = getDisplayName() || 'Anonymous';
-  const colorIndex = Math.floor(Math.random() * 6);
+  // Set awareness immediately after provider creation
   setLocalAwareness(provider.awareness, name, assignColor(colorIndex));
   setLocalPeerId(String(doc.clientID));
 
@@ -50,16 +54,22 @@ export function useRoom(roomCode: string, password?: string) {
   chatArray.observe(updateMessages);
   updateMessages();
 
-  // Track connection state
-  trystero.onPeerJoin((peerId) => {
+  // Track connection state — use awareness to look up peer names
+  trystero.onPeerJoin((_peerId) => {
     setIsConnected(true);
-    const peerStates = provider.awareness.getStates();
-    const peerState = peerStates.get(Number(peerId));
-    const peerName = peerState?.user?.name || 'Someone';
-    sendSystemMessage(doc, `${peerName} joined`);
+    // Delay the system message slightly so awareness has time to sync
+    setTimeout(() => {
+      const allParticipants = getParticipantList(provider.awareness);
+      // The newest participant is the one who just joined (highest joinedAt)
+      const newest = allParticipants
+        .filter(p => p.peerId !== String(doc.clientID))
+        .sort((a, b) => b.joinedAt - a.joinedAt)[0];
+      const peerName = newest?.name || 'Someone';
+      sendSystemMessage(doc, `${peerName} joined`);
+    }, 1000);
   });
 
-  trystero.onPeerLeave((peerId) => {
+  trystero.onPeerLeave((_peerId) => {
     if (trystero.getPeers().length === 0) {
       setIsConnected(false);
     }
@@ -70,9 +80,6 @@ export function useRoom(roomCode: string, password?: string) {
   if (password) {
     setRoomPassword(doc, password);
   }
-
-  // Mark connected once awareness is set
-  setIsConnected(true);
 
   const leave = () => {
     provider.destroy();

@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, Show, For } from 'solid-js';
+import { createSignal, Show, For } from 'solid-js';
 import { useRoom } from '../hooks/useRoom';
 import { usePolls } from '../hooks/usePolls';
 import { usePoker } from '../hooks/usePoker';
@@ -45,8 +45,6 @@ export default function RoomView(props: RoomViewProps) {
 
   const [activeTab, setActiveTab] = createSignal<Tab>('chat');
   const [showParticipants, setShowParticipants] = createSignal(false);
-
-  onCleanup(() => room.leave());
 
   const handleCopyLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}#/room/${props.roomCode}`;
