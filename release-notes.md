@@ -2,6 +2,19 @@
 
 ---
 
+## Fix: Nostr Relay Connectivity (2026-04-09)
+
+### What's New
+- **Explicit reliable Nostr relays**: Replaced trystero's random default relay selection with 10 known-reliable relays (relay.damus.io, nos.lol, relay.nostr.band, etc.)
+- **Increased relay redundancy**: Connect to 7 of 10 relays simultaneously (up from default 5) so signaling works even if some relays are down
+- **Root cause**: The default trystero relay pool includes many unreliable/offline relays. When the 5 randomly selected relays were mostly down, WebSocket signaling failed, preventing ICE candidate exchange, causing "ICE failed" WebRTC errors
+
+### Build Stats
+- Unit tests: 32 passed, 0 failed
+- Build: OK
+
+---
+
 ## M4++ — Mobile Fixes: Joining + Participant Drawer (2026-04-09)
 
 ### What's New
