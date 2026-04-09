@@ -12,18 +12,18 @@
 
 | ID | Title | Status | Agent | Priority | Milestone | Notes |
 |----|-------|--------|-------|----------|-----------|-------|
-| T-001 | Project scaffolding (Vite + SolidJS/Svelte + TypeScript) | new | backend-expert | must | M1 | Init repo, Vite config, PWA plugin, Tailwind/UnoCSS |
-| T-002 | Trystero P2P networking setup | new | backend-expert | must | M1 | Nostr strategy, room creation, peer lifecycle |
-| T-003 | Yjs document structure + sync over Trystero | new | backend-expert | must | M1 | Full Y.Doc schema per requirements |
-| T-004 | Room code generation (adjective-noun-NNNN) | new | backend-expert | must | M1 | Human-readable, unguessable |
-| T-005 | Landing page (create/join room) | new | frontend-expert | must | M1 | One-click create, join by code or link |
-| T-006 | Room view + participant list | new | frontend-expert | must | M1 | Names, colors, status indicators |
-| T-007 | Basic chat over Yjs | new | backend-expert | must | M1 | Messages in Y.Array, system messages |
-| T-008 | Chat UI component | new | frontend-expert | must | M1 | Message list, input, sender info |
-| T-009 | Design system + tokens | new | uiux-designer | must | M1 | Colors, typography, spacing, component specs |
-| T-010 | PWA manifest + service worker | new | backend-expert | must | M1 | vite-plugin-pwa config, offline landing |
-| T-011 | Static deployment setup (GitHub Pages) | new | backend-expert | must | M1 | GitHub Actions workflow |
-| T-012 | Initial security review + .gitignore | new | architect | must | M1 | Ensure no credentials, proper gitignore |
+| T-001 | Project scaffolding (Vite + SolidJS + TypeScript) | done | backend-expert | must | M1 | Vite 6 + SolidJS + Tailwind v4 + vitest |
+| T-002 | Trystero P2P networking setup | done | backend-expert | must | M1 | Nostr strategy, room creation, peer lifecycle, 10s grace |
+| T-003 | Yjs document structure + sync over Trystero | done | backend-expert | must | M1 | Custom TrysteroProvider, full Y.Doc schema |
+| T-004 | Room code generation (adjective-noun-NNNN) | done | backend-expert | must | M1 | crypto.getRandomValues, 4 unit tests |
+| T-005 | Landing page (create/join room) | done | frontend-expert | must | M1 | Create room, join by code, name persisted in localStorage |
+| T-006 | Room view + participant list | done | frontend-expert | must | M1 | Names, colors, status, copy link, leave |
+| T-007 | Basic chat over Yjs | done | backend-expert | must | M1 | Messages in Y.Array, system messages for join/leave |
+| T-008 | Chat UI component | done | frontend-expert | must | M1 | Message list, input, auto-scroll, Enter to send |
+| T-009 | Design system + tokens | done | uiux-designer | must | M1 | Tailwind v4 @theme, participant colors, Button/Input/Card/Badge |
+| T-010 | PWA manifest + service worker | done | backend-expert | must | M1 | vite-plugin-pwa, auto-update, 7 precached entries |
+| T-011 | Static deployment setup (GitHub Pages) | done | backend-expert | must | M1 | GitHub Actions workflow, upload-pages-artifact |
+| T-012 | Initial security review + .gitignore | done | architect | must | M1 | No credentials, .gitignore updated, security scan clean |
 
 ## Milestone M2 — Core Features
 
