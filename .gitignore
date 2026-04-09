@@ -4,6 +4,8 @@ node_modules/
 # Build
 dist/
 .vite/
+*.tsbuildinfo
+dev-dist/
 
 # Environment
 .env

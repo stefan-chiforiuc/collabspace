@@ -25,6 +25,7 @@ This project uses a multi-agent workflow. Agents are in `.claude/agents/`:
 | `frontend-expert` | UI components, responsive layout, accessibility |
 | `uiux-designer` | Design system, visual QA, UX flows |
 | `qa-agent` | Testing, bug reports, performance/security testing |
+| `code-reviewer` | Reviews code, runs QA pipeline, auto-commits when all checks pass |
 
 ## Memory System (Local Vector DB)
 All agents share a **semantic memory database** at `.claude/memory-db/`. It uses:
@@ -125,7 +126,7 @@ If ANY check fails, the merge is **aborted** and must be fixed first.
 `/git-start`, `/git-finish`, `/git-sync`, `/git-status`, `/git-release`, `/resolve-conflicts`, `/pre-merge-check`
 
 **Review & Testing:**
-`/security-scan`, `/arch-review`, `/design-review`, `/run-tests`, `/bug-report`, `/consult-challenger`
+`/review-and-commit`, `/security-scan`, `/arch-review`, `/design-review`, `/run-tests`, `/bug-report`, `/consult-challenger`
 
 **Memory:**
 `/memory-add`, `/memory-search`, `/memory-summary`

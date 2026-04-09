@@ -1,17 +1,32 @@
 {
-  "name": "local-tester",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "collabspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@xenova/transformers": "^2.17.2",
-    "vectra": "^0.12.3"
+    "solid-js": "^1.9.12",
+    "trystero": "^0.23.0",
+    "yjs": "^13.6.30",
+    "y-protocols": "^1.0.7",
+    "lib0": "^0.2.117",
+    "vectra": "^0.12.3",
+    "@xenova/transformers": "^2.17.2"
+  },
+  "devDependencies": {
+    "vite": "^6.4.2",
+    "vite-plugin-solid": "^2.11.6",
+    "vite-plugin-pwa": "^1.0.0",
+    "typescript": "^5.8.0",
+    "tailwindcss": "^4.1.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "vitest": "^3.2.0",
+    "jsdom": "^26.0.0"
   }
 }
