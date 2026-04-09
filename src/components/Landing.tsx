@@ -8,14 +8,16 @@ import { getDisplayName, setDisplayName } from '../lib/storage';
 export default function Landing() {
   const [name, setName] = createSignal(getDisplayName() ?? '');
   const [joinCode, setJoinCode] = createSignal('');
+  const [joinPassword, setJoinPassword] = createSignal('');
   const [password, setPassword] = createSignal('');
   const [showAdvanced, setShowAdvanced] = createSignal(false);
+  const [showJoinOptions, setShowJoinOptions] = createSignal(false);
 
   const handleCreate = () => {
-    if (name().trim()) setDisplayName(name().trim());
+    if (!name().trim()) return;
+    setDisplayName(name().trim());
     const code = generateRoomCode();
     const pw = password().trim();
-    // Pass creator flag + optional password via hash fragment
     if (pw) {
       const encoded = btoa(pw);
       window.location.hash = `/room/${code}?creator=1&pw=${encoded}`;
@@ -26,14 +28,23 @@ export default function Landing() {
 
   const handleJoin = () => {
     const code = joinCode().trim().toLowerCase();
-    if (!code) return;
-    if (name().trim()) setDisplayName(name().trim());
-    window.location.hash = `/room/${code}`;
+    if (!code || !name().trim()) return;
+    setDisplayName(name().trim());
+    const pw = joinPassword().trim();
+    if (pw) {
+      const encoded = btoa(pw);
+      window.location.hash = `/room/${code}?pw=${encoded}`;
+    } else {
+      window.location.hash = `/room/${code}`;
+    }
   };
 
   const handleJoinKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') handleJoin();
   };
+
+  const canCreate = () => !!name().trim();
+  const canJoin = () => !!name().trim() && !!joinCode().trim();
 
   return (
     <div class="min-h-screen flex items-center justify-center p-4">
@@ -57,7 +68,7 @@ export default function Landing() {
         />
 
         <div class="space-y-2">
-          <Button onClick={handleCreate} size="lg" class="w-full">
+          <Button onClick={handleCreate} size="lg" class="w-full" disabled={!canCreate()}>
             Create Room
           </Button>
           <button
@@ -87,17 +98,39 @@ export default function Landing() {
           </div>
         </div>
 
-        <div class="flex gap-2">
-          <Input
-            placeholder="calm-river-7291"
-            value={joinCode()}
-            onInput={(e) => setJoinCode(e.currentTarget.value)}
-            onKeyDown={handleJoinKeyDown}
-            class="flex-1"
-          />
-          <Button variant="secondary" onClick={handleJoin} disabled={!joinCode().trim()}>
-            Join
-          </Button>
+        <div class="space-y-3">
+          <div class="flex gap-2">
+            <Input
+              placeholder="calm-river-7291"
+              value={joinCode()}
+              onInput={(e) => setJoinCode(e.currentTarget.value)}
+              onKeyDown={handleJoinKeyDown}
+              class="flex-1"
+            />
+            <Button variant="secondary" onClick={handleJoin} disabled={!canJoin()}>
+              Join
+            </Button>
+          </div>
+
+          <Show when={joinCode().trim()}>
+            <button
+              onClick={() => setShowJoinOptions(!showJoinOptions())}
+              class="text-xs text-surface-500 hover:text-surface-300 cursor-pointer w-full text-center"
+            >
+              {showJoinOptions() ? 'Hide' : 'Room has a password?'}
+            </button>
+          </Show>
+
+          <Show when={showJoinOptions()}>
+            <Input
+              label="Room password"
+              placeholder="Enter room password"
+              value={joinPassword()}
+              onInput={(e) => setJoinPassword(e.currentTarget.value)}
+              onKeyDown={handleJoinKeyDown}
+              maxLength={64}
+            />
+          </Show>
         </div>
       </Card>
     </div>
