@@ -76,6 +76,38 @@ When scanning for credentials, check for patterns like:
 - If an agent's code violates the architecture, create a task for the PM to fix it.
 - Report all findings back to the Project Manager.
 
+## Git Flow Workflow
+
+Every agent MUST use git-flow for all code changes. Never commit directly to `main` or `develop`.
+
+### Starting Work
+1. Before starting any task, create a feature branch:
+```bash
+bash .claude/memory-db/git-flow-helper.sh start-feature architect <task-id> "<description>"
+```
+This creates: `feature/<agent>/<task-id>-<description>`
+
+2. All your work goes on this feature branch.
+3. Commit frequently with clear messages.
+
+### Finishing Work
+1. When done, sync with develop first:
+```bash
+bash .claude/memory-db/git-flow-helper.sh sync
+```
+2. Then finish the feature (runs pre-merge checks automatically):
+```bash
+bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
+```
+3. Pre-merge validation runs: conflict check, credential scan, lint, tests, build.
+4. If checks fail, fix issues before retrying.
+5. If merge conflicts occur, use `/resolve-conflicts` to resolve them safely.
+
+### Memory Integration
+- Before starting: `node .claude/memory-db/memory-store.mjs search --query "<what you're working on>"`
+- After completing: `node .claude/memory-db/memory-store.mjs add --type <type> --agent architect --content "..." --summary "..."`
+- Report completion to the Project Manager.
+
 ## Available Commands
 - `/security-scan` — Scan codebase for credentials and vulnerabilities
 - `/arch-review` — Review code for architectural compliance

@@ -88,6 +88,38 @@ Implement all user-facing components for the core features:
 - If unsure about architecture, consult the Architect agent.
 - If unsure about design, consult the UI/UX agent.
 
+## Git Flow Workflow
+
+Every agent MUST use git-flow for all code changes. Never commit directly to `main` or `develop`.
+
+### Starting Work
+1. Before starting any task, create a feature branch:
+```bash
+bash .claude/memory-db/git-flow-helper.sh start-feature frontend-expert <task-id> "<description>"
+```
+This creates: `feature/<agent>/<task-id>-<description>`
+
+2. All your work goes on this feature branch.
+3. Commit frequently with clear messages.
+
+### Finishing Work
+1. When done, sync with develop first:
+```bash
+bash .claude/memory-db/git-flow-helper.sh sync
+```
+2. Then finish the feature (runs pre-merge checks automatically):
+```bash
+bash .claude/memory-db/git-flow-helper.sh finish-feature <branch-name>
+```
+3. Pre-merge validation runs: conflict check, credential scan, lint, tests, build.
+4. If checks fail, fix issues before retrying.
+5. If merge conflicts occur, use `/resolve-conflicts` to resolve them safely.
+
+### Memory Integration
+- Before starting: `node .claude/memory-db/memory-store.mjs search --query "<what you're working on>"`
+- After completing: `node .claude/memory-db/memory-store.mjs add --type <type> --agent frontend-expert --content "..." --summary "..."`
+- Report completion to the Project Manager.
+
 ## Available Commands
 - `/implement-component` — Build a specific UI component
 - `/responsive-check` — Verify responsive layout at all breakpoints
