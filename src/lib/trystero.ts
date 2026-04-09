@@ -14,8 +14,27 @@ export interface TrysteroRoom {
   leave: () => void;
 }
 
+// Known-reliable Nostr relays for signaling (tested April 2026)
+// Using more relays increases the chance that at least some are reachable
+const RELAY_URLS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://purplerelay.com',
+  'wss://nostr.mutinywallet.com',
+  'wss://relay.snort.social',
+  'wss://offchain.pub',
+  'wss://nostr-pub.wellorder.net',
+  'wss://relay.nostr.bg',
+  'wss://nostr.fmt.wiz.biz',
+];
+
 export function createTrysteroRoom(roomCode: string): TrysteroRoom {
-  const room = trysteroJoin({ appId: APP_ID }, roomCode);
+  const room = trysteroJoin({
+    appId: APP_ID,
+    relayUrls: RELAY_URLS,
+    relayRedundancy: 7,  // Connect to 7 of 10 relays for reliability
+  }, roomCode);
 
   const [sendSync, getSync] = room.makeAction<Uint8Array>('yjs-sync');
   const [sendAwareness, getAwareness] = room.makeAction<Uint8Array>('yjs-awareness');
