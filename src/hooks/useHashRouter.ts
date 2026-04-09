@@ -2,7 +2,7 @@ import { createSignal, onCleanup } from 'solid-js';
 
 export type Route =
   | { page: 'landing' }
-  | { page: 'room'; roomCode: string; password?: string };
+  | { page: 'room'; roomCode: string; password?: string; isCreator: boolean };
 
 function parseHash(): Route {
   const hash = window.location.hash;
@@ -12,7 +12,8 @@ function parseHash(): Route {
     const params = new URLSearchParams(match[2] || '');
     const pw = params.get('pw');
     const password = pw ? atob(pw) : undefined;
-    return { page: 'room', roomCode, password };
+    const isCreator = params.get('creator') === '1';
+    return { page: 'room', roomCode, password, isCreator };
   }
   return { page: 'landing' };
 }
