@@ -1,15 +1,30 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import solid from 'vite-plugin-solid';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+
+function versionPlugin(): Plugin {
+  return {
+    name: 'version-json',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ buildTime: Date.now() }),
+      });
+    },
+  };
+}
 
 export default defineConfig({
   base: './',
   plugins: [
     solid(),
     tailwindcss(),
+    versionPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'CollabSpace',
