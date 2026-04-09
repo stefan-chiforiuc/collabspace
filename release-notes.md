@@ -2,6 +2,22 @@
 
 ---
 
+## Connection Status Panel (2026-04-09)
+
+### What's New
+- **Live connection status**: Tap the connection dot in the header to see a detailed panel showing all relay connections
+- **Per-relay status**: Each MQTT broker and BitTorrent tracker shows its live state (Connected / Connecting / Disconnected)
+- **Strategy summary**: See how many MQTT brokers and BitTorrent trackers are connected at a glance
+- **Peer count**: Shows the number of connected peers
+- **Color-coded badges**: MQTT relays shown in blue, BitTorrent in orange, with green/yellow/red state indicators
+- **Auto-refresh**: Status updates every 2 seconds
+
+### Build Stats
+- Unit tests: 32 passed, 0 failed
+- Build: OK
+
+---
+
 ## Fix: Dual-Strategy Signaling — MQTT + BitTorrent (2026-04-09)
 
 ### What's New

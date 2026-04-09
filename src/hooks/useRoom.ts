@@ -1,5 +1,5 @@
 import { createSignal, onCleanup } from 'solid-js';
-import { createTrysteroRoom, type TrysteroRoom } from '../lib/trystero';
+import { createTrysteroRoom, type TrysteroRoom, type ConnectionStatus } from '../lib/trystero';
 import { createYDoc } from '../lib/yjs-doc';
 import { TrysteroProvider } from '../lib/yjs-sync';
 import { setLocalAwareness, getParticipantList, assignColor } from '../lib/participants';
@@ -88,10 +88,20 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
 
   onCleanup(leave);
 
+  // Poll connection status every 2 seconds
+  const [connectionStatus, setConnectionStatus] = createSignal<ConnectionStatus>(
+    trystero.getConnectionStatus()
+  );
+  const statusInterval = setInterval(() => {
+    setConnectionStatus(trystero.getConnectionStatus());
+  }, 2000);
+  onCleanup(() => clearInterval(statusInterval));
+
   return {
     participants,
     messages,
     isConnected,
+    connectionStatus,
     localPeerId,
     localName: name,
     doc,
