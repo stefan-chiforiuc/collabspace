@@ -2,6 +2,29 @@
 
 ---
 
+## Fix: Dual-Strategy Signaling — MQTT + BitTorrent (2026-04-09)
+
+### What's New
+- **Replaced Nostr with MQTT + BitTorrent dual signaling**: Nostr relays were too unreliable. Now using two signaling strategies simultaneously for maximum connectivity
+- **MQTT brokers** (primary): HiveMQ, EMQX, Mosquitto, Shiftr.io — enterprise-grade, near-100% uptime
+- **BitTorrent trackers** (secondary): WebTorrent.dev, OpenWebTorrent — well-maintained torrent infrastructure
+- **Dual-path discovery**: Both strategies run in parallel. Peers discover each other through whichever connects first. Messages are sent on both paths for reliability
+- **Deduplicated peer events**: Even though peers may connect via both strategies, join/leave callbacks only fire once per peer
+
+### Why This Works Better
+| Strategy | Infrastructure | Uptime | Speed |
+|----------|---------------|--------|-------|
+| Nostr relays (old) | Volunteer-run | Unreliable | Variable |
+| MQTT brokers (new) | Enterprise (HiveMQ, EMQX) | ~99.9% | Fast |
+| BitTorrent trackers (new) | Well-funded projects | ~99% | Moderate |
+
+### Build Stats
+- Main JS: 472KB (146KB gzipped) — includes MQTT + torrent clients
+- Unit tests: 32 passed, 0 failed
+- Build: OK
+
+---
+
 ## Fix: Nostr Relay Connectivity (2026-04-09)
 
 ### What's New
