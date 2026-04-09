@@ -15,12 +15,12 @@ export default function Landing() {
     if (name().trim()) setDisplayName(name().trim());
     const code = generateRoomCode();
     const pw = password().trim();
-    // Pass password via hash fragment: #/room/code?pw=base64
+    // Pass creator flag + optional password via hash fragment
     if (pw) {
       const encoded = btoa(pw);
-      window.location.hash = `/room/${code}?pw=${encoded}`;
+      window.location.hash = `/room/${code}?creator=1&pw=${encoded}`;
     } else {
-      window.location.hash = `/room/${code}`;
+      window.location.hash = `/room/${code}?creator=1`;
     }
   };
 

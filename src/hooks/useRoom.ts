@@ -9,14 +9,13 @@ import { getDisplayName } from '../lib/storage';
 import { MAX_PARTICIPANTS } from '../lib/constants';
 import type { Participant, ChatMessage } from '../lib/types';
 
-export function useRoom(roomCode: string, password?: string) {
+export function useRoom(roomCode: string, password?: string, isCreator: boolean = false) {
   const [participants, setParticipants] = createSignal<Participant[]>([]);
   const [messages, setMessages] = createSignal<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = createSignal(false);
   const [localPeerId, setLocalPeerId] = createSignal('');
 
-  // Only the creator (who has a password) writes initial meta
-  const isCreator = !!password;
+  // Only the creator writes initial meta — joiners receive it via Yjs sync
   const doc = createYDoc({
     roomCode,
     roomName: roomCode,

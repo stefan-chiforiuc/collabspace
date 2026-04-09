@@ -13,8 +13,8 @@ export default function App() {
       </Match>
       <Match when={route().page === 'room'}>
         {(() => {
-          const r = route() as { page: 'room'; roomCode: string; password?: string };
-          return <RoomView roomCode={r.roomCode} password={r.password} />;
+          const r = route() as { page: 'room'; roomCode: string; password?: string; isCreator: boolean };
+          return <RoomView roomCode={r.roomCode} password={r.password} isCreator={r.isCreator} />;
         })()}
       </Match>
     </Switch>

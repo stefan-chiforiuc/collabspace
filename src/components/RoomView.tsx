@@ -19,6 +19,7 @@ import Button from './ui/Button';
 interface RoomViewProps {
   roomCode: string;
   password?: string;
+  isCreator: boolean;
 }
 
 type Tab = 'chat' | 'polls' | 'poker' | 'timer' | 'notes';
@@ -32,11 +33,12 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function RoomView(props: RoomViewProps) {
-  const [passwordVerified, setPasswordVerified] = createSignal(!!props.password);
+  // Creators skip the password gate entirely
+  const [passwordVerified, setPasswordVerified] = createSignal(props.isCreator);
   const [passwordError, setPasswordError] = createSignal('');
-  const [checkingPassword, setCheckingPassword] = createSignal(!props.password);
+  const [checkingPassword, setCheckingPassword] = createSignal(!props.isCreator);
 
-  const room = useRoom(props.roomCode, props.password);
+  const room = useRoom(props.roomCode, props.password, props.isCreator);
   const polls = usePolls(room.doc, room.localPeerId(), room.localName);
   const poker = usePoker(room.doc, room.localPeerId(), room.localName);
   const timer = useTimer(room.doc, room.localPeerId(), room.localName);
@@ -52,11 +54,11 @@ export default function RoomView(props: RoomViewProps) {
   const [activeTab, setActiveTab] = createSignal<Tab>('chat');
   const [showParticipants, setShowParticipants] = createSignal(false);
 
-  // For joiners (no password in URL): watch the Yjs doc meta for a password hash.
+  // For joiners: watch the Yjs doc meta for a password hash.
   // Once the doc syncs and we can see whether a password is set, either:
   // - Show password gate if room is protected
   // - Auto-verify if room has no password
-  if (!props.password) {
+  if (!props.isCreator) {
     const meta = room.doc.getMap('meta');
     const checkPassword = () => {
       if (hasRoomPassword(room.doc)) {
