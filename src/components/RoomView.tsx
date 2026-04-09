@@ -1,4 +1,4 @@
-import { createSignal, Show, For } from 'solid-js';
+import { createSignal, onCleanup, Show, For } from 'solid-js';
 import { useRoom } from '../hooks/useRoom';
 import { usePolls } from '../hooks/usePolls';
 import { usePoker } from '../hooks/usePoker';
@@ -60,22 +60,35 @@ export default function RoomView(props: RoomViewProps) {
   // - Auto-verify if room has no password
   if (!props.isCreator) {
     const meta = room.doc.getMap('meta');
+    let resolved = false;
+
+    const resolve = (hasPassword: boolean) => {
+      if (resolved) return;
+      resolved = true;
+      setCheckingPassword(false);
+      setPasswordVerified(!hasPassword);
+    };
+
     const checkPassword = () => {
       if (hasRoomPassword(room.doc)) {
-        // Room has a password — joiner must enter it
-        setCheckingPassword(false);
-        setPasswordVerified(false);
+        resolve(true);
       } else if (meta.get('roomCode')) {
-        // Meta has synced (roomCode is set) and no password — allow entry
-        setCheckingPassword(false);
-        setPasswordVerified(true);
+        resolve(false);
       }
-      // If meta hasn't synced yet (no roomCode), keep waiting
     };
 
     // Check immediately and also observe changes (for when sync completes)
     checkPassword();
     meta.observe(checkPassword);
+
+    // Timeout fallback: if P2P sync is slow (mobile, poor connection),
+    // assume no password after 10 seconds and let the joiner in
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolve(false);
+      }
+    }, 10_000);
+    onCleanup(() => clearTimeout(timeout));
   }
 
   const handlePasswordSubmit = async (attempt: string) => {
@@ -121,16 +134,7 @@ export default function RoomView(props: RoomViewProps) {
           {/* Header */}
           <header class="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 border-b border-surface-700 bg-surface-800/80 backdrop-blur-sm" role="banner">
             <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-              {/* Mobile participants toggle */}
-              <button
-                onClick={() => setShowParticipants(!showParticipants())}
-                class="md:hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-700 transition-colors cursor-pointer text-surface-400"
-                aria-label={`${room.participants().length} participants`}
-                aria-expanded={showParticipants()}
-              >
-                <span class="text-xs font-semibold">{room.participants().length}</span>
-              </button>
-              <span class="font-mono text-xs sm:text-sm text-primary-400 bg-surface-900 px-2 sm:px-3 py-1 rounded-lg truncate max-w-[140px] sm:max-w-none">
+              <span class="font-mono text-xs sm:text-sm text-primary-400 bg-surface-900 px-2 sm:px-3 py-1 rounded-lg truncate max-w-[120px] sm:max-w-none">
                 {props.roomCode}
               </span>
               <Show when={room.isConnected()}>
@@ -139,6 +143,31 @@ export default function RoomView(props: RoomViewProps) {
               <Show when={!room.isConnected()}>
                 <span class="w-2 h-2 rounded-full bg-warning animate-pulse shrink-0" aria-label="Reconnecting" role="status" />
               </Show>
+              {/* Mobile participants — colored dots + toggle */}
+              <button
+                onClick={() => setShowParticipants(!showParticipants())}
+                class="md:hidden flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-700/50 hover:bg-surface-700 transition-colors cursor-pointer"
+                aria-label={`${room.participants().length} participants — tap to show`}
+                aria-expanded={showParticipants()}
+              >
+                <div class="flex -space-x-1">
+                  <For each={room.participants().slice(0, 4)}>
+                    {(p) => (
+                      <span
+                        class="w-3 h-3 rounded-full border border-surface-800 shrink-0"
+                        style={{ "background-color": p.color }}
+                        title={p.name}
+                      />
+                    )}
+                  </For>
+                  <Show when={room.participants().length > 4}>
+                    <span class="w-3 h-3 rounded-full bg-surface-600 border border-surface-800 flex items-center justify-center shrink-0">
+                      <span class="text-[7px] text-surface-300">+{room.participants().length - 4}</span>
+                    </span>
+                  </Show>
+                </div>
+                <span class="text-[10px] text-surface-400 ml-0.5">{room.participants().length}</span>
+              </button>
               {/* Compact timer in header when running */}
               <Show when={timer.state().mode !== 'stopped'}>
                 <span
@@ -170,24 +199,31 @@ export default function RoomView(props: RoomViewProps) {
               <ParticipantList participants={room.participants()} />
             </aside>
 
-            {/* Mobile participants drawer */}
+            {/* Mobile participants drawer — slides in from left */}
             <Show when={showParticipants()}>
-              <div class="md:hidden absolute inset-0 z-20 flex">
-                <div class="w-64 bg-surface-800 border-r border-surface-700 overflow-y-auto shadow-xl" role="dialog" aria-label="Participants">
+              <div class="md:hidden absolute inset-0 z-20 flex animate-fade-in">
+                <div class="w-72 bg-surface-800/95 backdrop-blur-sm border-r border-surface-700 overflow-y-auto shadow-2xl animate-slide-in-left" role="dialog" aria-label="Participants">
                   <div class="flex items-center justify-between p-3 border-b border-surface-700">
-                    <span class="text-sm font-semibold text-surface-200">Participants</span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-semibold text-surface-200">Participants</span>
+                      <span class="text-xs text-surface-500 bg-surface-700 px-1.5 py-0.5 rounded">
+                        {room.participants().length}/{6}
+                      </span>
+                    </div>
                     <button
                       onClick={() => setShowParticipants(false)}
-                      class="w-7 h-7 flex items-center justify-center rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700 cursor-pointer"
+                      class="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 hover:text-surface-200 hover:bg-surface-700 cursor-pointer transition-colors"
                       aria-label="Close participants"
                     >
-                      x
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
                     </button>
                   </div>
                   <ParticipantList participants={room.participants()} />
                 </div>
                 <div
-                  class="flex-1 bg-black/40"
+                  class="flex-1 bg-black/50 backdrop-blur-[2px]"
                   onClick={() => setShowParticipants(false)}
                 />
               </div>

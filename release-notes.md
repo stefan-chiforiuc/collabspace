@@ -2,6 +2,21 @@
 
 ---
 
+## M4++ — Mobile Fixes: Joining + Participant Drawer (2026-04-09)
+
+### What's New
+- **Mobile join fix**: Joiners stuck on "Connecting to room..." now have a 10-second timeout fallback — if P2P sync is slow (common on mobile), assume no password and let the joiner in
+- **Mobile participant drawer**: Colored dots in the header show who's connected at a glance. Tap to open a slide-in drawer with the full participant list (name, color, status)
+- **Drawer animations**: Smooth slide-in-left and fade-in animations for the mobile participant drawer
+- **Better close button**: Proper X icon instead of text "x" in the drawer header
+
+### Build Stats
+- Main JS: 111KB (39KB gzipped)
+- CSS: 27KB (6KB gzipped)
+- Unit tests: 32 passed, 0 failed
+
+---
+
 ## M4+ — P2P Sync Fix, PR Workflow, E2E Testing, Docker (2026-04-09)
 
 ### What's New

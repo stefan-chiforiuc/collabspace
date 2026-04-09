@@ -100,3 +100,22 @@ body {
 }
 
 .notepad-editor .tiptap p { margin: 0.25rem 0; }
+
+/* Mobile drawer animations */
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.2s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
