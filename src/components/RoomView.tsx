@@ -14,6 +14,7 @@ import TimerPanel from './TimerPanel';
 import NotepadPanel from './NotepadPanel';
 import ReactionsBar from './ReactionsBar';
 import PasswordGate from './PasswordGate';
+import ConnectionStatusPanel from './ConnectionStatus';
 import Button from './ui/Button';
 
 interface RoomViewProps {
@@ -53,6 +54,7 @@ export default function RoomView(props: RoomViewProps) {
 
   const [activeTab, setActiveTab] = createSignal<Tab>('chat');
   const [showParticipants, setShowParticipants] = createSignal(false);
+  const [showConnectionStatus, setShowConnectionStatus] = createSignal(false);
 
   // For joiners: watch the Yjs doc meta for a password hash.
   // Once the doc syncs and we can see whether a password is set, either:
@@ -130,19 +132,24 @@ export default function RoomView(props: RoomViewProps) {
 
       {/* Main room view — only shown after password verification */}
       <Show when={passwordVerified()}>
-        <div class="h-screen flex flex-col">
+        <div class="h-screen flex flex-col relative">
           {/* Header */}
           <header class="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 border-b border-surface-700 bg-surface-800/80 backdrop-blur-sm" role="banner">
             <div class="flex items-center gap-2 sm:gap-3 min-w-0">
               <span class="font-mono text-xs sm:text-sm text-primary-400 bg-surface-900 px-2 sm:px-3 py-1 rounded-lg truncate max-w-[120px] sm:max-w-none">
                 {props.roomCode}
               </span>
-              <Show when={room.isConnected()}>
-                <span class="w-2 h-2 rounded-full bg-success shrink-0" aria-label="Connected" role="status" />
-              </Show>
-              <Show when={!room.isConnected()}>
-                <span class="w-2 h-2 rounded-full bg-warning animate-pulse shrink-0" aria-label="Reconnecting" role="status" />
-              </Show>
+              {/* Connection status indicator — tap to see details */}
+              <button
+                onClick={() => setShowConnectionStatus(!showConnectionStatus())}
+                class="flex items-center gap-1.5 px-1.5 py-1 rounded-lg hover:bg-surface-700/50 transition-colors cursor-pointer"
+                aria-label={`Connection: ${room.isConnected() ? 'connected' : 'connecting'} — tap for details`}
+              >
+                <span class={`w-2 h-2 rounded-full shrink-0 ${room.isConnected() ? 'bg-success' : 'bg-warning animate-pulse'}`} role="status" />
+                <span class="text-[10px] text-surface-500 hidden sm:inline">
+                  {room.connectionStatus().mqtt.connected + room.connectionStatus().torrent.connected} relays
+                </span>
+              </button>
               {/* Mobile participants — colored dots + toggle */}
               <button
                 onClick={() => setShowParticipants(!showParticipants())}
@@ -191,6 +198,15 @@ export default function RoomView(props: RoomViewProps) {
               </Button>
             </div>
           </header>
+
+          {/* Connection status panel — dropdown */}
+          <Show when={showConnectionStatus()}>
+            <ConnectionStatusPanel
+              status={room.connectionStatus()}
+              isConnected={room.isConnected()}
+              onClose={() => setShowConnectionStatus(false)}
+            />
+          </Show>
 
           {/* Main content */}
           <div class="flex-1 flex overflow-hidden relative">

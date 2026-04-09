@@ -1,7 +1,20 @@
-import { joinRoom as mqttJoin } from '@trystero-p2p/mqtt';
-import { joinRoom as torrentJoin } from '@trystero-p2p/torrent';
+import { joinRoom as mqttJoin, getRelaySockets as getMqttSockets } from '@trystero-p2p/mqtt';
+import { joinRoom as torrentJoin, getRelaySockets as getTorrentSockets } from '@trystero-p2p/torrent';
 import type { Room } from 'trystero';
 import { APP_ID, DISCONNECT_GRACE_MS, MAX_PARTICIPANTS } from './constants';
+
+export type RelayStatus = {
+  url: string;
+  strategy: 'mqtt' | 'torrent';
+  state: 'connecting' | 'open' | 'closed';
+};
+
+export type ConnectionStatus = {
+  mqtt: { connected: number; total: number };
+  torrent: { connected: number; total: number };
+  relays: RelayStatus[];
+  peerCount: number;
+};
 
 export interface TrysteroRoom {
   room: Room;
@@ -12,14 +25,9 @@ export interface TrysteroRoom {
   onPeerJoin: (cb: (peerId: string) => void) => void;
   onPeerLeave: (cb: (peerId: string) => void) => void;
   getPeers: () => string[];
+  getConnectionStatus: () => ConnectionStatus;
   leave: () => void;
 }
-
-// Signaling strategy: MQTT brokers (enterprise-grade, highly reliable)
-// Fallback: BitTorrent trackers via WebTorrent
-//
-// MQTT brokers (HiveMQ, Mosquitto, EMQX) have near-100% uptime.
-// If MQTT fails for any reason, torrent trackers provide a second path.
 
 const MQTT_BROKERS = [
   'wss://broker.hivemq.com:8884/mqtt',
@@ -36,9 +44,15 @@ const TORRENT_TRACKERS = [
   'wss://tracker.files.fm:7073/announce',
 ];
 
+function getSocketState(ws: WebSocket): 'connecting' | 'open' | 'closed' {
+  switch (ws.readyState) {
+    case WebSocket.CONNECTING: return 'connecting';
+    case WebSocket.OPEN: return 'open';
+    default: return 'closed';
+  }
+}
+
 export function createTrysteroRoom(roomCode: string): TrysteroRoom {
-  // Use both MQTT and torrent rooms simultaneously for maximum reliability.
-  // Peers discover each other through whichever strategy connects first.
   const mqttRoom = mqttJoin(
     { appId: APP_ID, relayUrls: MQTT_BROKERS, relayRedundancy: 4 },
     roomCode
@@ -49,7 +63,6 @@ export function createTrysteroRoom(roomCode: string): TrysteroRoom {
     roomCode
   );
 
-  // Merge actions from both rooms — messages go out on both, received from either
   const [mqttSendSync, mqttGetSync] = mqttRoom.makeAction<Uint8Array>('yjs-sync');
   const [mqttSendAwareness, mqttGetAwareness] = mqttRoom.makeAction<Uint8Array>('yjs-awareness');
   const [torrentSendSync, torrentGetSync] = torrentRoom.makeAction<Uint8Array>('yjs-sync');
@@ -71,7 +84,6 @@ export function createTrysteroRoom(roomCode: string): TrysteroRoom {
       return;
     }
 
-    // Only fire callbacks for genuinely new peers
     if (!peers.has(peerId)) {
       peers.add(peerId);
       joinCallbacks.forEach((cb) => cb(peerId));
@@ -93,8 +105,36 @@ export function createTrysteroRoom(roomCode: string): TrysteroRoom {
   torrentRoom.onPeerJoin(handlePeerJoin);
   torrentRoom.onPeerLeave(handlePeerLeave);
 
+  const getConnectionStatus = (): ConnectionStatus => {
+    const mqttSockets = getMqttSockets();
+    const torrentSockets = getTorrentSockets();
+
+    const relays: RelayStatus[] = [];
+    let mqttConnected = 0;
+    let torrentConnected = 0;
+
+    for (const [url, ws] of Object.entries(mqttSockets)) {
+      const state = getSocketState(ws as WebSocket);
+      if (state === 'open') mqttConnected++;
+      relays.push({ url, strategy: 'mqtt', state });
+    }
+
+    for (const [url, ws] of Object.entries(torrentSockets)) {
+      const state = getSocketState(ws as WebSocket);
+      if (state === 'open') torrentConnected++;
+      relays.push({ url, strategy: 'torrent', state });
+    }
+
+    return {
+      mqtt: { connected: mqttConnected, total: MQTT_BROKERS.length },
+      torrent: { connected: torrentConnected, total: TORRENT_TRACKERS.length },
+      relays,
+      peerCount: peers.size,
+    };
+  };
+
   return {
-    room: mqttRoom, // Primary room reference
+    room: mqttRoom,
     sendSync: (data, targets) => {
       mqttSendSync(data, targets);
       torrentSendSync(data, targets);
@@ -114,6 +154,7 @@ export function createTrysteroRoom(roomCode: string): TrysteroRoom {
     onPeerJoin: (cb) => joinCallbacks.push(cb),
     onPeerLeave: (cb) => leaveCallbacks.push(cb),
     getPeers: () => [...peers],
+    getConnectionStatus,
     leave: () => {
       disconnectTimers.forEach((t) => clearTimeout(t));
       disconnectTimers.clear();
