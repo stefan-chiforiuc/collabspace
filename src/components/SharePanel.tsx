@@ -7,15 +7,19 @@ import {
   getWhatsAppShareUrl,
   generateQRCodeSVG,
 } from '../lib/share';
+import type { TurnServerConfig } from '../lib/turn-config';
 
 interface SharePanelProps {
   roomCode: string;
+  turnServers?: TurnServerConfig[];
   onClose: () => void;
 }
 
 export default function SharePanel(props: SharePanelProps) {
   const [copied, setCopied] = createSignal(false);
-  const url = () => getShareUrl(props.roomCode);
+  const hasTurn = () => (props.turnServers?.length ?? 0) > 0;
+  // Include TURN credentials in the URL for best mobile experience
+  const url = () => getShareUrl(props.roomCode, props.turnServers);
   const qrSvg = () => generateQRCodeSVG(url(), 4);
 
   const handleCopy = async () => {
@@ -27,11 +31,11 @@ export default function SharePanel(props: SharePanelProps) {
   };
 
   const handleWhatsApp = () => {
-    window.open(getWhatsAppShareUrl(props.roomCode), '_blank');
+    window.open(getWhatsAppShareUrl(props.roomCode, props.turnServers), '_blank');
   };
 
   const handleNativeShare = () => {
-    shareViaWebAPI(props.roomCode);
+    shareViaWebAPI(props.roomCode, props.turnServers);
   };
 
   return (
@@ -57,6 +61,9 @@ export default function SharePanel(props: SharePanelProps) {
           innerHTML={qrSvg()}
         />
         <span class="font-mono text-xs text-surface-400 mt-2">{props.roomCode}</span>
+        <Show when={hasTurn()}>
+          <span class="text-[10px] text-purple-400 mt-1">Link includes TURN relay credentials</span>
+        </Show>
       </div>
 
       {/* Actions */}

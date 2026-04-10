@@ -1,8 +1,9 @@
 import { createSignal, onCleanup } from 'solid-js';
+import type { TurnServerConfig } from '../lib/turn-config';
 
 export type Route =
   | { page: 'landing' }
-  | { page: 'room'; roomCode: string; password?: string; isCreator: boolean };
+  | { page: 'room'; roomCode: string; password?: string; isCreator: boolean; sharedTurn?: TurnServerConfig[] };
 
 function parseHash(): Route {
   const hash = window.location.hash;
@@ -13,7 +14,19 @@ function parseHash(): Route {
     const pw = params.get('pw');
     const password = pw ? atob(pw) : undefined;
     const isCreator = params.get('creator') === '1';
-    return { page: 'room', roomCode, password, isCreator };
+
+    // Parse shared TURN credentials from invite URL
+    let sharedTurn: TurnServerConfig[] | undefined;
+    const turnParam = params.get('turn');
+    if (turnParam) {
+      try {
+        sharedTurn = JSON.parse(atob(turnParam));
+      } catch {
+        console.warn('[CollabSpace] Failed to parse TURN credentials from URL');
+      }
+    }
+
+    return { page: 'room', roomCode, password, isCreator, sharedTurn };
   }
   return { page: 'landing' };
 }

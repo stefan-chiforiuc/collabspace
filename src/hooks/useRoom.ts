@@ -9,8 +9,9 @@ import { setRoomPassword } from '../lib/room-password';
 import { getDisplayName } from '../lib/storage';
 import { MAX_PARTICIPANTS } from '../lib/constants';
 import { getConnectionSettings, saveConnectionSettings, type ConnectionSettings } from '../lib/connection-settings';
-import { buildTurnServers } from '../lib/turn-config';
+import { buildTurnServers, type TurnServerConfig } from '../lib/turn-config';
 import { createMqttRelay, type RelayTransport } from '../lib/mqtt-relay';
+import { publishTurnCredentials, watchSharedTurnCredentials } from '../lib/turn-sharing';
 import type { Participant, ChatMessage } from '../lib/types';
 
 export type RoomConnectionState = 'connecting' | 'connected' | 'relay' | 'failed';
@@ -30,7 +31,7 @@ const EMPTY_STATUS: ConnectionStatus = {
   mqttRelay: 'inactive',
 };
 
-export function useRoom(roomCode: string, password?: string, isCreator: boolean = false) {
+export function useRoom(roomCode: string, password?: string, isCreator: boolean = false, sharedTurn?: TurnServerConfig[]) {
   const [participants, setParticipants] = createSignal<Participant[]>([]);
   const [messages, setMessages] = createSignal<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = createSignal(false);
@@ -68,6 +69,9 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   let autoReconnectInterval: ReturnType<typeof setInterval> | null = null;
   let relayTimeout: ReturnType<typeof setTimeout> | null = null;
+  let unwatchTurn: (() => void) | null = null;
+  /** TURN servers built from local settings (used for sharing) */
+  let localTurnServers: TurnServerConfig[] = [];
 
   /** How long to wait for WebRTC before activating MQTT relay fallback */
   const RELAY_FALLBACK_DELAY_MS = 15_000;
@@ -210,6 +214,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     if (connectionTimeout) { clearTimeout(connectionTimeout); connectionTimeout = null; }
     if (autoReconnectInterval) { clearInterval(autoReconnectInterval); autoReconnectInterval = null; }
     if (relayTimeout) { clearTimeout(relayTimeout); relayTimeout = null; }
+    localTurnServers = [];
     relay?.destroy();
     relay = null;
     provider?.destroy();
@@ -220,13 +225,19 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   }
 
   // Initial async connection
-  async function connect(s: ConnectionSettings) {
+  async function connect(s: ConnectionSettings, extraTurnServers?: TurnServerConfig[]) {
     setConnectionState('connecting');
     setIsConnected(false);
     try {
-      const turnServers = await buildTurnServers(s);
+      const turnServers = [...(await buildTurnServers(s)), ...(extraTurnServers || [])];
+      localTurnServers = turnServers;
       const t = createTrysteroRoom(roomCode, s, turnServers);
       wireTransport(t);
+
+      // If we have TURN servers, publish them for other peers (e.g., those on relay)
+      if (turnServers.length > 0) {
+        publishTurnCredentials(doc, turnServers);
+      }
     } catch (err) {
       console.error('Failed to create room:', err);
       setConnectionState('failed');
@@ -234,14 +245,14 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   }
 
   // Reconnect with new settings (preserves Yjs doc + chat history)
-  async function reconnect(newSettings?: ConnectionSettings) {
+  async function reconnect(newSettings?: ConnectionSettings, extraTurn?: TurnServerConfig[]) {
     const s = newSettings || settings();
     if (newSettings) {
       saveConnectionSettings(newSettings);
       setSettings(newSettings);
     }
     teardownTransport();
-    await connect(s);
+    await connect(s, extraTurn);
   }
 
   // Set room password if creator
@@ -249,10 +260,29 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     setRoomPassword(doc, password);
   }
 
-  // Start initial connection
-  connect(settings());
+  // Start initial connection (with shared TURN from invite URL if available)
+  connect(settings(), sharedTurn);
+
+  // Watch for shared TURN credentials from other peers.
+  // If we're in relay mode and receive working TURN creds, reconnect with them.
+  unwatchTurn = watchSharedTurnCredentials(doc, (creds) => {
+    const currentState = connectionState();
+    // Only attempt reconnect if we're in relay mode or failed
+    if (currentState !== 'relay' && currentState !== 'failed') return;
+    // Don't reconnect if the shared servers are the same as what we already have
+    if (localTurnServers.length > 0) return;
+
+    console.log('[CollabSpace:turn-share] Received shared TURN from peer, reconnecting...');
+    sendSystemMessage(doc, 'Received TURN credentials — upgrading to direct P2P...');
+
+    // Reconnect with the shared TURN servers added to our config
+    const s = settings();
+    teardownTransport();
+    connect(s, creds.servers);
+  });
 
   const leave = () => {
+    unwatchTurn?.();
     teardownTransport();
     doc.destroy();
   };
@@ -274,6 +304,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
       sendChatMessage(doc, text, String(doc.clientID), name);
     },
     trysteroRoom: trysteroRef,
+    turnServers: () => localTurnServers,
     reconnect,
     retryFailedConnections: () => reconnect(),
     leave,

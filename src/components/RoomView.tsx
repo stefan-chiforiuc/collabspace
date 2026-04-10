@@ -27,10 +27,13 @@ import VideoGrid from './VideoGrid';
 import Button from './ui/Button';
 import Card from './ui/Card';
 
+import type { TurnServerConfig } from '../lib/turn-config';
+
 interface RoomViewProps {
   roomCode: string;
   password?: string;
   isCreator: boolean;
+  sharedTurn?: TurnServerConfig[];
 }
 
 type Tab = 'chat' | 'polls' | 'poker' | 'timer' | 'notes';
@@ -48,7 +51,7 @@ export default function RoomView(props: RoomViewProps) {
   const [passwordError, setPasswordError] = createSignal('');
   const [checkingPassword, setCheckingPassword] = createSignal(!props.isCreator);
 
-  const room = useRoom(props.roomCode, props.password, props.isCreator);
+  const room = useRoom(props.roomCode, props.password, props.isCreator, props.sharedTurn);
   const polls = usePolls(room.doc, room.localPeerId(), room.localName);
   const poker = usePoker(room.doc, room.localPeerId(), room.localName);
   const timer = useTimer(room.doc, room.localPeerId(), room.localName);
@@ -312,6 +315,7 @@ export default function RoomView(props: RoomViewProps) {
           <Show when={showSharePanel()}>
             <SharePanel
               roomCode={props.roomCode}
+              turnServers={room.turnServers()}
               onClose={() => setShowSharePanel(false)}
             />
           </Show>
