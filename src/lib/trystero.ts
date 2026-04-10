@@ -43,6 +43,7 @@ export type ConnectionStatus = {
   appId: string;
   diagnostics: DiagnosticEvent[];
   ice: IceInfo;
+  mqttRelay: 'inactive' | 'connecting' | 'active' | 'failed';
 };
 
 export interface TrysteroRoom {
@@ -59,6 +60,7 @@ export interface TrysteroRoom {
   addStream: (stream: MediaStream, targetPeers?: string[]) => Promise<void>[];
   removeStream: (stream: MediaStream, targetPeers?: string[]) => void;
   onPeerStream: (cb: (stream: MediaStream, peerId: string, metadata?: unknown) => void) => void;
+  setMqttRelayState: (state: 'inactive' | 'connecting' | 'active' | 'failed') => void;
   leave: () => void;
 }
 
@@ -210,6 +212,8 @@ export function createTrysteroRoom(
 
   // Track previous relay states to detect changes
   let prevRelayStates: Record<string, string> = {};
+  // MQTT relay state (set externally by useRoom)
+  let mqttRelayState: 'inactive' | 'connecting' | 'active' | 'failed' = 'inactive';
 
   const getConnectionStatus = (): ConnectionStatus => {
     const relays: RelayStatus[] = [];
@@ -268,6 +272,7 @@ export function createTrysteroRoom(
       roomCode,
       appId: APP_ID,
       diagnostics: allDiagnostics,
+      mqttRelay: mqttRelayState,
       ice: {
         peerConnectionsCreated: iceSummary.peerConnectionsCreated,
         hasTurnServers: iceSummary.hasTurnServers,
@@ -303,6 +308,7 @@ export function createTrysteroRoom(
     addStream: (stream, targets) => primaryRoom.addStream(stream, targets),
     removeStream: (stream, targets) => primaryRoom.removeStream(stream, targets),
     onPeerStream: (cb) => primaryRoom.onPeerStream(cb),
+    setMqttRelayState: (s) => { mqttRelayState = s; },
     leave: () => {
       disconnectTimers.forEach((t) => clearTimeout(t));
       disconnectTimers.clear();

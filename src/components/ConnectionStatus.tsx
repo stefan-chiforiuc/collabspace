@@ -94,6 +94,25 @@ export default function ConnectionStatusPanel(props: ConnectionStatusProps) {
             </span>
           </div>
         </Show>
+        <Show when={props.status.mqttRelay !== 'inactive'}>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class={`w-1.5 h-1.5 rounded-full ${
+                props.status.mqttRelay === 'active' ? 'bg-orange-400' :
+                props.status.mqttRelay === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-error'
+              }`} />
+              <span class="text-xs text-surface-300 font-medium">MQTT Relay</span>
+            </div>
+            <span class={`text-[10px] px-1 py-0.5 rounded font-medium ${
+              props.status.mqttRelay === 'active' ? 'bg-orange-500/15 text-orange-400' :
+              props.status.mqttRelay === 'connecting' ? 'bg-yellow-500/15 text-yellow-400' :
+              'bg-red-500/15 text-red-400'
+            }`}>
+              {props.status.mqttRelay === 'active' ? 'Active (no P2P)' :
+               props.status.mqttRelay === 'connecting' ? 'Connecting...' : 'Failed'}
+            </span>
+          </div>
+        </Show>
         <div class="flex items-center justify-between pt-0.5">
           <span class="text-xs text-surface-400">Peers</span>
           <span class="text-xs font-mono text-primary-400">{props.status.peerCount}</span>
