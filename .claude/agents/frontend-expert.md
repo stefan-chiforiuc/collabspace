@@ -67,8 +67,8 @@ Implement all user-facing components for the core features:
 - Keep total bundle under 200KB gzipped
 
 ## Technical Guidelines
-- Use SolidJS or Svelte 5 as decided by the Architect.
-- Style with UnoCSS or Tailwind CSS — utility-first approach.
+- Use SolidJS for UI framework.
+- Style with Tailwind CSS v4 — utility-first approach.
 - Consume state from Yjs document — subscribe to Yjs observeDeep for reactive updates.
 - Use Awareness protocol for presence data.
 - **Never store shared state locally** — all shared state lives in Yjs.
