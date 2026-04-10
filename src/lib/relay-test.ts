@@ -2,13 +2,24 @@
  * Standalone relay connectivity tester.
  * Tests whether MQTT brokers and WebTorrent trackers are reachable
  * by opening WebSocket connections and checking they connect.
+ * Also tests TURN server reachability via ICE candidate gathering.
  */
+
+import { generateOpenRelayCredentials } from './turn-config';
 
 export type RelayTestResult = {
   url: string;
   strategy: 'mqtt' | 'torrent';
   reachable: boolean;
   latencyMs: number | null;
+  error?: string;
+};
+
+export type TurnTestResult = {
+  reachable: boolean;
+  latencyMs: number | null;
+  candidateTypes: string[];  // 'host' | 'srflx' | 'relay'
+  hasRelay: boolean;         // THE critical check
   error?: string;
 };
 
@@ -80,4 +91,115 @@ export async function testRelayConnectivity(
   console.log(`[CollabSpace:test] Results: MQTT ${mqttOk}/${mqttServers.length} OK, Torrent ${torrentOk}/${torrentServers.length} OK`);
 
   return results;
+}
+
+/**
+ * Test TURN server connectivity by creating a dummy RTCPeerConnection
+ * with ONLY the TURN server, triggering ICE gathering, and checking
+ * whether a 'relay' candidate is produced.
+ *
+ * A 'relay' candidate proves the TURN server is reachable and working.
+ */
+export async function testTurnConnectivity(timeoutMs = 15000): Promise<TurnTestResult> {
+  console.log('[CollabSpace:test] Starting TURN connectivity test...');
+
+  if (typeof RTCPeerConnection === 'undefined') {
+    return { reachable: false, latencyMs: null, candidateTypes: [], hasRelay: false, error: 'RTCPeerConnection not available' };
+  }
+
+  const start = Date.now();
+
+  try {
+    const creds = await generateOpenRelayCredentials();
+    console.log(`[CollabSpace:test] TURN credentials generated, username=${creds.username}`);
+
+    // Create a peer connection with ONLY TURN servers (no STUN)
+    // so any relay candidate proves TURN works
+    const pc = new RTCPeerConnection({
+      iceServers: [{
+        urls: creds.urls,
+        username: creds.username,
+        credential: creds.credential,
+      }],
+      iceTransportPolicy: 'relay', // force relay-only
+    });
+
+    const candidateTypes: string[] = [];
+    let hasRelay = false;
+
+    const result = await new Promise<TurnTestResult>((resolve) => {
+      let settled = false;
+      const finish = (r: TurnTestResult) => {
+        if (settled) return;
+        settled = true;
+        pc.close();
+        resolve(r);
+      };
+
+      const timer = setTimeout(() => {
+        const msg = candidateTypes.length > 0
+          ? `Timeout — got candidates [${candidateTypes.join(',')}] but no relay`
+          : 'Timeout — no ICE candidates gathered';
+        finish({
+          reachable: false, latencyMs: Date.now() - start,
+          candidateTypes, hasRelay: false, error: msg,
+        });
+      }, timeoutMs);
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          const typeMatch = e.candidate.candidate.match(/typ (\w+)/);
+          const ctype = typeMatch?.[1] ?? 'unknown';
+          candidateTypes.push(ctype);
+          console.log(`[CollabSpace:test] TURN candidate: ${ctype} ${e.candidate.candidate.slice(0, 80)}`);
+
+          if (ctype === 'relay') {
+            hasRelay = true;
+            clearTimeout(timer);
+            finish({
+              reachable: true, latencyMs: Date.now() - start,
+              candidateTypes, hasRelay: true,
+            });
+          }
+        } else {
+          // Gathering complete — no relay candidate found
+          if (!hasRelay) {
+            clearTimeout(timer);
+            finish({
+              reachable: false, latencyMs: Date.now() - start,
+              candidateTypes, hasRelay: false,
+              error: `Gathering complete — candidates: [${candidateTypes.join(',')}], no relay`,
+            });
+          }
+        }
+      };
+
+      pc.onicecandidateerror = (e: Event) => {
+        const err = e as RTCPeerConnectionIceErrorEvent;
+        console.log(`[CollabSpace:test] ICE candidate error: ${err.errorCode} ${err.errorText ?? ''} ${err.url ?? ''}`);
+      };
+
+      // Create a dummy data channel + offer to trigger ICE gathering
+      pc.createDataChannel('turn-test');
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .catch(err => {
+          clearTimeout(timer);
+          finish({
+            reachable: false, latencyMs: Date.now() - start,
+            candidateTypes, hasRelay: false,
+            error: `Offer creation failed: ${err}`,
+          });
+        });
+    });
+
+    console.log(`[CollabSpace:test] TURN test result: reachable=${result.reachable} hasRelay=${result.hasRelay} (${result.latencyMs}ms)`);
+    return result;
+  } catch (err) {
+    return {
+      reachable: false, latencyMs: Date.now() - start,
+      candidateTypes: [], hasRelay: false,
+      error: `TURN test failed: ${err}`,
+    };
+  }
 }
