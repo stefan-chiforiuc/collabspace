@@ -25,6 +25,7 @@ const EMPTY_STATUS: ConnectionStatus = {
   roomCode: '',
   appId: '',
   diagnostics: [],
+  ice: { peerConnectionsCreated: 0, hasTurnServers: false, candidateTypes: [], iceStates: [], connectionStates: [] },
 };
 
 export function useRoom(roomCode: string, password?: string, isCreator: boolean = false) {
