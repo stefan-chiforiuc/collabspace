@@ -219,7 +219,11 @@ export default function RoomView(props: RoomViewProps) {
                 class="flex items-center gap-1.5 px-1.5 py-1 rounded-lg hover:bg-surface-700/50 transition-colors cursor-pointer"
                 aria-label="Connection details"
               >
-                <span class={`w-2 h-2 rounded-full shrink-0 ${room.isConnected() ? 'bg-success' : room.connectionState() === 'connecting' ? 'bg-warning animate-pulse' : 'bg-error'}`} role="status" />
+                <span class={`w-2 h-2 rounded-full shrink-0 ${
+                  room.connectionState() === 'relay' ? 'bg-orange-400' :
+                  room.isConnected() ? 'bg-success' :
+                  room.connectionState() === 'connecting' ? 'bg-warning animate-pulse' : 'bg-error'
+                }`} role="status" />
                 <span class="text-[10px] text-surface-500 hidden sm:inline">
                   {room.connectionStatus().mqtt.connected + room.connectionStatus().torrent.connected} relays
                 </span>

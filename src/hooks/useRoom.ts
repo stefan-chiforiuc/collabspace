@@ -10,9 +10,10 @@ import { getDisplayName } from '../lib/storage';
 import { MAX_PARTICIPANTS } from '../lib/constants';
 import { getConnectionSettings, saveConnectionSettings, type ConnectionSettings } from '../lib/connection-settings';
 import { buildTurnServers } from '../lib/turn-config';
+import { createMqttRelay, type RelayTransport } from '../lib/mqtt-relay';
 import type { Participant, ChatMessage } from '../lib/types';
 
-export type RoomConnectionState = 'connecting' | 'connected' | 'failed';
+export type RoomConnectionState = 'connecting' | 'connected' | 'relay' | 'failed';
 
 const EMPTY_STATUS: ConnectionStatus = {
   mqtt: { enabled: false, connected: 0, total: 0 },
@@ -26,6 +27,7 @@ const EMPTY_STATUS: ConnectionStatus = {
   appId: '',
   diagnostics: [],
   ice: { peerConnectionsCreated: 0, hasTurnServers: false, candidateTypes: [], iceStates: [], connectionStates: [] },
+  mqttRelay: 'inactive',
 };
 
 export function useRoom(roomCode: string, password?: string, isCreator: boolean = false) {
@@ -61,9 +63,14 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   // Mutable refs for current trystero + provider (swapped on reconnect)
   let trystero: TrysteroRoom | null = null;
   let provider: TrysteroProvider | null = null;
+  let relay: RelayTransport | null = null;
   let statusInterval: ReturnType<typeof setInterval> | null = null;
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   let autoReconnectInterval: ReturnType<typeof setInterval> | null = null;
+  let relayTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  /** How long to wait for WebRTC before activating MQTT relay fallback */
+  const RELAY_FALLBACK_DELAY_MS = 15_000;
 
   // Track chat messages (bound to doc, survives reconnect)
   const chatArray = doc.getArray('chat');
@@ -127,7 +134,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     if (!isCreator) {
       if (connectionTimeout) clearTimeout(connectionTimeout);
       connectionTimeout = setTimeout(() => {
-        if (!isConnected()) {
+        if (!isConnected() && connectionState() !== 'relay') {
           setConnectionState('failed');
         }
       }, 30_000);
@@ -135,6 +142,15 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
       // Creator is "connected" immediately (they're the first one in)
       setConnectionState('connected');
     }
+
+    // MQTT relay fallback — if no WebRTC peer joins within RELAY_FALLBACK_DELAY_MS,
+    // activate relay mode so Yjs sync works through the MQTT broker.
+    if (relayTimeout) clearTimeout(relayTimeout);
+    relayTimeout = setTimeout(() => {
+      if (!isConnected() && !relay) {
+        activateRelay();
+      }
+    }, RELAY_FALLBACK_DELAY_MS);
 
     // Auto-reconnect polling — detect failed relays and rebuild transport
     if (autoReconnectInterval) clearInterval(autoReconnectInterval);
@@ -147,11 +163,55 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     }
   }
 
+  // Activate MQTT relay fallback
+  function activateRelay() {
+    if (relay) return;
+    const s = settings();
+    const brokerUrls = s.mqtt.enabled ? s.mqtt.servers : [];
+    if (brokerUrls.length === 0) {
+      console.log('[CollabSpace:relay] No MQTT brokers available for relay');
+      return;
+    }
+
+    console.log('[CollabSpace:relay] Activating MQTT relay fallback...');
+    trystero?.setMqttRelayState('connecting');
+    relay = createMqttRelay(roomCode, String(doc.clientID), brokerUrls);
+
+    // Poll relay state until it becomes active
+    const pollRelay = setInterval(() => {
+      const state = relay?.state();
+      if (state === 'active' && provider) {
+        clearInterval(pollRelay);
+        provider.activateRelay(relay!);
+        trystero?.setMqttRelayState('active');
+        setConnectionState('relay');
+        setIsConnected(true);
+        // Clear the failed timeout
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout);
+          connectionTimeout = null;
+        }
+        sendSystemMessage(doc, 'Connected via relay (no direct P2P)');
+        console.log('[CollabSpace:relay] MQTT relay is active — Yjs sync operational');
+      } else if (state === 'failed') {
+        clearInterval(pollRelay);
+        trystero?.setMqttRelayState('failed');
+        console.log('[CollabSpace:relay] MQTT relay failed to connect');
+      }
+    }, 500);
+
+    // Give up polling after 15s
+    setTimeout(() => clearInterval(pollRelay), 15_000);
+  }
+
   // Tear down current transport (preserves doc)
   function teardownTransport() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     if (connectionTimeout) { clearTimeout(connectionTimeout); connectionTimeout = null; }
     if (autoReconnectInterval) { clearInterval(autoReconnectInterval); autoReconnectInterval = null; }
+    if (relayTimeout) { clearTimeout(relayTimeout); relayTimeout = null; }
+    relay?.destroy();
+    relay = null;
     provider?.destroy();
     trystero?.leave();
     provider = null;
