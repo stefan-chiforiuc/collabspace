@@ -76,6 +76,34 @@ export const DEFAULT_TURN_PROVIDERS: TurnProvider[] = [
     enabled: true,
     builtin: true,
   },
+  // Static-credential providers — different hostname, simple username/password
+  {
+    id: 'openrelay-static',
+    label: 'Open Relay (Static Creds)',
+    urls: [
+      'turn:openrelay.metered.ca:443?transport=tcp',
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443',
+    ],
+    credentialType: 'static',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+    enabled: true,
+    builtin: true,
+  },
+  {
+    id: 'freeturn',
+    label: 'FreeTURN.net (slow, 50Kbit/s)',
+    urls: [
+      'turn:freeturn.net:3478',
+      'turn:freeturn.net:3478?transport=tcp',
+    ],
+    credentialType: 'static',
+    username: 'free',
+    credential: 'free',
+    enabled: true,
+    builtin: true,
+  },
 ];
 
 export const DEFAULT_MQTT_SERVERS = [
