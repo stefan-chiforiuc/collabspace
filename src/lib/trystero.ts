@@ -4,6 +4,7 @@ import type { Room } from 'trystero';
 import { APP_ID, DISCONNECT_GRACE_MS, MAX_PARTICIPANTS } from './constants';
 import type { ConnectionSettings } from './connection-settings';
 import type { TurnServerConfig } from './turn-config';
+import { getIceSummary, getIceLog } from './webrtc-diagnostics';
 
 // Diagnostic: verify selfId is shared between strategies (same @trystero-p2p/core instance)
 export const selfId = mqttSelfId;
@@ -18,8 +19,16 @@ export type RelayStatus = {
 
 export type DiagnosticEvent = {
   time: number;
-  type: 'relay' | 'peer' | 'info' | 'error';
+  type: 'relay' | 'peer' | 'info' | 'error' | 'ice';
   message: string;
+};
+
+export type IceInfo = {
+  peerConnectionsCreated: number;
+  hasTurnServers: boolean;
+  candidateTypes: string[];  // host, srflx, relay
+  iceStates: string[];
+  connectionStates: string[];
 };
 
 export type ConnectionStatus = {
@@ -33,6 +42,7 @@ export type ConnectionStatus = {
   roomCode: string;
   appId: string;
   diagnostics: DiagnosticEvent[];
+  ice: IceInfo;
 };
 
 export interface TrysteroRoom {
@@ -246,6 +256,12 @@ export function createTrysteroRoom(
       }
     }
 
+    // Merge ICE diagnostics into the event log
+    const iceSummary = getIceSummary();
+    const iceEvents = getIceLog();
+    const allDiagnostics: DiagnosticEvent[] = [...diagnostics, ...iceEvents]
+      .sort((a, b) => a.time - b.time);
+
     return {
       mqtt: { enabled: settings.mqtt.enabled, connected: mqttConnected, total: settings.mqtt.servers.length },
       torrent: { enabled: settings.torrent.enabled, connected: torrentConnected, total: settings.torrent.servers.length },
@@ -256,7 +272,14 @@ export function createTrysteroRoom(
       selfIdMatch,
       roomCode,
       appId: APP_ID,
-      diagnostics: [...diagnostics],
+      diagnostics: allDiagnostics,
+      ice: {
+        peerConnectionsCreated: iceSummary.peerConnectionsCreated,
+        hasTurnServers: iceSummary.hasTurnServers,
+        candidateTypes: [...iceSummary.candidateTypesLocal],
+        iceStates: iceSummary.iceStates,
+        connectionStates: iceSummary.connectionStates,
+      },
     };
   };
 

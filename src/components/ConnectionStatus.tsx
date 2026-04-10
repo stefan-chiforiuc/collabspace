@@ -1,6 +1,6 @@
 import { Show, For, createSignal } from 'solid-js';
 import type { ConnectionStatus } from '../lib/trystero';
-import { testRelayConnectivity, type RelayTestResult } from '../lib/relay-test';
+import { testRelayConnectivity, testTurnConnectivity, type RelayTestResult, type TurnTestResult } from '../lib/relay-test';
 
 interface ConnectionStatusProps {
   status: ConnectionStatus;
@@ -19,6 +19,9 @@ export default function ConnectionStatusPanel(props: ConnectionStatusProps) {
   const [testResults, setTestResults] = createSignal<RelayTestResult[] | null>(null);
   const [testing, setTesting] = createSignal(false);
 
+  const [turnResult, setTurnResult] = createSignal<TurnTestResult | null>(null);
+  const [testingTurn, setTestingTurn] = createSignal(false);
+
   const runRelayTest = async () => {
     setTesting(true);
     setTestResults(null);
@@ -27,6 +30,14 @@ export default function ConnectionStatusPanel(props: ConnectionStatusProps) {
     const results = await testRelayConnectivity(mqttUrls, torrentUrls);
     setTestResults(results);
     setTesting(false);
+  };
+
+  const runTurnTest = async () => {
+    setTestingTurn(true);
+    setTurnResult(null);
+    const result = await testTurnConnectivity();
+    setTurnResult(result);
+    setTestingTurn(false);
   };
 
   return (
@@ -107,6 +118,69 @@ export default function ConnectionStatusPanel(props: ConnectionStatusProps) {
         <Show when={!props.status.selfIdMatch}>
           <div class="text-[10px] text-error font-medium mt-1">
             WARNING: MQTT/Torrent selfId mismatch! Strategies may not share peers.
+          </div>
+        </Show>
+      </div>
+
+      {/* WebRTC / ICE Status */}
+      <div class="px-3 py-2 space-y-1 border-b border-surface-700/50">
+        <div class="flex items-center justify-between">
+          <div class="text-[10px] text-surface-500 uppercase tracking-wider">WebRTC / ICE</div>
+          <button
+            onClick={runTurnTest}
+            disabled={testingTurn()}
+            class="text-[10px] font-medium text-purple-400 hover:text-purple-300 disabled:text-surface-600 cursor-pointer disabled:cursor-wait"
+          >
+            {testingTurn() ? 'Testing...' : 'Test TURN'}
+          </button>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] text-surface-400">PeerConnections</span>
+          <span class="text-[10px] font-mono text-surface-300">{props.status.ice.peerConnectionsCreated}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] text-surface-400">TURN in config</span>
+          <span class={`text-[10px] font-mono ${props.status.ice.hasTurnServers ? 'text-success' : 'text-error'}`}>
+            {props.status.ice.hasTurnServers ? 'yes' : 'NO'}
+          </span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] text-surface-400">Candidate types</span>
+          <span class="text-[10px] font-mono text-surface-300">
+            {props.status.ice.candidateTypes.length > 0 ? props.status.ice.candidateTypes.join(', ') : 'none yet'}
+          </span>
+        </div>
+        <Show when={props.status.ice.candidateTypes.length > 0}>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] text-surface-400">Has relay candidate</span>
+            <span class={`text-[10px] font-bold ${props.status.ice.candidateTypes.includes('relay') ? 'text-success' : 'text-error'}`}>
+              {props.status.ice.candidateTypes.includes('relay') ? 'YES' : 'NO — TURN may be broken'}
+            </span>
+          </div>
+        </Show>
+        <Show when={props.status.ice.iceStates.length > 0}>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] text-surface-400">ICE states</span>
+            <span class={`text-[10px] font-mono ${
+              props.status.ice.iceStates.includes('connected') || props.status.ice.iceStates.includes('completed')
+                ? 'text-success'
+                : props.status.ice.iceStates.includes('failed')
+                  ? 'text-error'
+                  : 'text-warning'
+            }`}>
+              {[...new Set(props.status.ice.iceStates)].join(', ')}
+            </span>
+          </div>
+        </Show>
+
+        {/* TURN test result */}
+        <Show when={turnResult()}>
+          <div class={`mt-1 text-[10px] p-1.5 rounded ${turnResult()!.hasRelay ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+            <Show when={turnResult()!.hasRelay} fallback={
+              <span>TURN UNREACHABLE — {turnResult()!.error?.slice(0, 60)}</span>
+            }>
+              <span>TURN OK — relay candidate in {turnResult()!.latencyMs}ms</span>
+            </Show>
           </div>
         </Show>
       </div>
