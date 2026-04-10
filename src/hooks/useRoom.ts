@@ -20,6 +20,11 @@ const EMPTY_STATUS: ConnectionStatus = {
   turn: null,
   relays: [],
   peerCount: 0,
+  selfId: '',
+  selfIdMatch: true,
+  roomCode: '',
+  appId: '',
+  diagnostics: [],
 };
 
 export function useRoom(roomCode: string, password?: string, isCreator: boolean = false) {
