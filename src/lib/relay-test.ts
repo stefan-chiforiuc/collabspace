@@ -6,6 +6,7 @@
  */
 
 import { generateOpenRelayCredentials } from './turn-config';
+import { DEFAULT_TURN_PROVIDERS, type TurnProvider } from './connection-settings';
 
 export type RelayTestResult = {
   url: string;
@@ -98,9 +99,12 @@ export async function testRelayConnectivity(
  * with ONLY the TURN server, triggering ICE gathering, and checking
  * whether a 'relay' candidate is produced.
  *
- * A 'relay' candidate proves the TURN server is reachable and working.
+ * If no provider is given, tests ALL enabled built-in providers.
  */
-export async function testTurnConnectivity(timeoutMs = 15000): Promise<TurnTestResult> {
+export async function testTurnConnectivity(
+  provider?: TurnProvider,
+  timeoutMs = 15000,
+): Promise<TurnTestResult> {
   console.log('[CollabSpace:test] Starting TURN connectivity test...');
 
   if (typeof RTCPeerConnection === 'undefined') {
@@ -110,17 +114,24 @@ export async function testTurnConnectivity(timeoutMs = 15000): Promise<TurnTestR
   const start = Date.now();
 
   try {
-    const creds = await generateOpenRelayCredentials();
-    console.log(`[CollabSpace:test] TURN credentials generated, username=${creds.username}`);
+    // Build ICE servers list from given provider or all enabled defaults
+    const providers = provider ? [provider] : DEFAULT_TURN_PROVIDERS.filter(p => p.enabled);
+    const iceServers: RTCIceServer[] = [];
+    for (const p of providers) {
+      if (p.credentialType === 'hmac-openrelay') {
+        const creds = await generateOpenRelayCredentials();
+        iceServers.push({ urls: p.urls, username: creds.username, credential: creds.credential });
+      } else if (p.credentialType === 'static' && p.username) {
+        iceServers.push({ urls: p.urls, username: p.username, credential: p.credential });
+      } else {
+        iceServers.push({ urls: p.urls });
+      }
+    }
 
-    // Create a peer connection with ONLY TURN servers (no STUN)
-    // so any relay candidate proves TURN works
+    console.log(`[CollabSpace:test] Testing ${iceServers.length} TURN server(s)...`);
+
     const pc = new RTCPeerConnection({
-      iceServers: [{
-        urls: creds.urls,
-        username: creds.username,
-        credential: creds.credential,
-      }],
+      iceServers,
       iceTransportPolicy: 'relay', // force relay-only
     });
 
