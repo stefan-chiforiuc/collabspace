@@ -10,6 +10,7 @@ import {
   getRemainingMs,
   formatTime,
 } from '../lib/timer';
+import { dispatchNotification } from '../lib/notifications';
 import type { TimerState } from '../lib/types';
 
 export function useTimer(doc: Y.Doc, localPeerId: string, localName: string) {
@@ -56,6 +57,7 @@ export function useTimer(doc: Y.Doc, localPeerId: string, localName: string) {
     start: (durationMs: number) => {
       setExpired(false);
       startTimer(doc, durationMs, localPeerId, localName);
+      dispatchNotification(doc, 'timer_started', localPeerId, localName, `${localName} started a timer`, 'timer');
     },
     pause: () => pauseTimer(doc),
     resume: () => resumeTimer(doc),

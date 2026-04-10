@@ -124,7 +124,7 @@
 ### E2E Test Suite (10 tests, all passing)
 - App loads and landing page renders
 - Room creation with all tabs visible
-- Alice & Bob P2P connection via Nostr signaling
+- Alice & Bob P2P connection via MQTT + BitTorrent signaling
 - Chat messages sync bidirectionally
 - Poll creation syncs between peers
 - Timer sync between peers

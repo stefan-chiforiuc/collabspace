@@ -8,7 +8,7 @@ The v1 requirements are solid in vision but overengineered for the stated goal o
 
 | v1 Assumption | Problem | v2 Response |
 |---|---|---|
-| "Minimal signaling service" | Still a server to deploy, monitor, and pay for | Piggyback on existing free infrastructure (BitTorrent trackers, Nostr relays) — no custom server at all |
+| "Minimal signaling service" | Still a server to deploy, monitor, and pay for | Piggyback on existing free infrastructure (MQTT brokers, BitTorrent trackers) — no custom server at all |
 | Custom WebRTC connection management | Complex, error-prone, weeks of work | Use **Trystero** library — handles signaling via free public infrastructure + WebRTC setup in ~50 lines |
 | Custom CRDT sync over data channels | Reinventing the wheel | Use **Yjs** + its built-in providers — battle-tested CRDT with awareness, undo, and multiple transports |
 | Custom host migration protocol | Complex distributed systems problem for a collaboration tool | Simplify to **leaderless CRDT model** — no host needed for most features; elect coordinator only when ordering matters (polls, poker reveals) |
@@ -21,7 +21,7 @@ The v1 requirements are solid in vision but overengineered for the stated goal o
 
 ## Revised Core Principles
 
-1. **Absolutely no custom server** — Not even a "minimal" one. Signaling uses existing free public infrastructure (BitTorrent trackers, Nostr relays, MQTT brokers). The app is a static site.
+1. **Absolutely no custom server** — Not even a "minimal" one. Signaling uses existing free public infrastructure (MQTT brokers, BitTorrent trackers). The app is a static site.
 2. **Static deployment, zero ops** — Deploy to GitHub Pages, Cloudflare Pages, or Netlify. No CI/CD needed beyond a push to main. No database, no serverless functions, no cloud accounts to manage.
 3. **Leaderless by default** — CRDTs eliminate the need for a host/coordinator in most cases. A coordinator is only elected for actions that require synchronization (reveal poker cards, close a poll). Any peer can be coordinator.
 4. **Ephemeral sessions** — Nothing persists after the last peer leaves. Local export is available for anything worth keeping.
@@ -36,7 +36,7 @@ The v1 requirements are solid in vision but overengineered for the stated goal o
 
 **Why Trystero?**
 - Uses existing free infrastructure for WebRTC signaling — **no custom signaling server**
-- Supports multiple strategies as fallback: Nostr relays, BitTorrent trackers, MQTT brokers
+- Supports multiple strategies: MQTT brokers (primary) + BitTorrent trackers (secondary)
 - ~4KB library, handles all WebRTC connection establishment
 - Room-based model maps directly to our session concept
 - MIT licensed, actively maintained
@@ -51,13 +51,13 @@ The v1 requirements are solid in vision but overengineered for the stated goal o
 **How they work together:**
 ```
 [Static Site] --> [Trystero] --> [Free Public Infrastructure] --> [WebRTC Data Channels]
-                                  (Nostr/BitTorrent/MQTT)              |
+                                  (MQTT/BitTorrent)              |
                                                                   [Yjs CRDT Sync]
                                                                        |
                                                               [Shared App State]
 ```
 
-1. User creates a room — Trystero generates a room ID, announces via Nostr/BT/MQTT
+1. User creates a room — Trystero generates a room ID, announces via MQTT/BT
 2. Other users join via link containing the room ID
 3. Trystero establishes WebRTC data channels between all peers (mesh)
 4. Yjs syncs a shared document over those data channels
@@ -91,6 +91,7 @@ Y.Doc
 ├── meta (Y.Map)
 │   ├── roomName: string
 │   ├── createdAt: number
+│   ├── password: string (optional, SHA-256 hashed)
 │   └── settings: { maxParticipants, etc. }
 ├── chat (Y.Array)
 │   └── [{ id, author, text, timestamp, reactions: {} }]
@@ -219,7 +220,7 @@ Y.Doc
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | NFR-01 | The app is a static site — deployable to GitHub Pages, Cloudflare Pages, or Netlify with zero configuration | Must |
-| NFR-02 | Zero custom backend — signaling uses Trystero (Nostr relays / BT trackers / MQTT brokers) | Must |
+| NFR-02 | Zero custom backend — signaling uses Trystero (MQTT brokers + BitTorrent trackers) | Must |
 | NFR-03 | Zero ongoing costs — free static hosting + free public infrastructure for signaling/STUN | Must |
 | NFR-04 | PWA: installable on mobile and desktop, service worker for offline landing page | Must |
 | NFR-05 | Session state fully replicated via Yjs CRDT — no single point of failure | Must |
@@ -229,7 +230,7 @@ Y.Doc
 | NFR-09 | All communication encrypted via WebRTC DTLS | Must |
 | NFR-10 | Auto-reconnect on temporary disconnection (10s grace period) | Must |
 | NFR-11 | First meaningful paint under 2s on 4G | Should |
-| NFR-12 | Total bundle size under 200KB gzipped | Should |
+| NFR-12 | Main bundle under 200KB gzipped (TipTap editor chunk is lazy-loaded separately) | Should |
 | NFR-13 | WCAG 2.1 AA accessibility compliance | Should |
 | NFR-14 | No analytics, tracking, or cookies — privacy by design | Should |
 
@@ -241,16 +242,16 @@ No more "TBD" — decisions made for simplicity and speed:
 
 | Layer | Choice | Why |
 |---|---|---|
-| **Framework** | **SolidJS** | Tiny runtime (~7KB), fast, JSX familiar, great DX. Or **Svelte 5** if team prefers — both are excellent for small, fast apps. |
-| **Networking** | **Trystero** (Nostr strategy) | Zero-config P2P signaling via free Nostr relays. Falls back to BitTorrent trackers. No server. |
+| **Framework** | **SolidJS** | Tiny runtime (~7KB), fast, JSX familiar, great DX. |
+| **Networking** | **Trystero** (MQTT + BitTorrent dual strategy) | Dual-path P2P signaling via MQTT brokers (primary) and BitTorrent trackers (secondary). No server. |
 | **State Sync** | **Yjs** | Best-in-class CRDT. Handles all collaborative state, awareness, and conflict resolution. |
 | **Rich Text** | **TipTap** (with Yjs binding) | Collaborative editor with Yjs integration out of the box. |
-| **Styling** | **UnoCSS** or **Tailwind CSS** | Utility-first, tree-shakeable, fast. |
+| **Styling** | **Tailwind CSS v4** | Utility-first, tree-shakeable, fast. |
 | **Build** | **Vite** | Fast dev server, PWA plugin (vite-plugin-pwa), excellent tree-shaking. |
 | **Testing** | **Vitest** + **Playwright** | Unit + E2E. |
-| **Deployment** | **GitHub Pages** (via GitHub Actions) or **Cloudflare Pages** | Free, zero-config, auto-deploys on push. |
+| **Deployment** | **GitHub Pages** (via GitHub Actions) | Free, zero-config, auto-deploys on push. |
 | **STUN** | **Google's free STUN servers** | `stun:stun.l.google.com:19302` — reliable, free, no setup. |
-| **TURN** | **None in v1** | Accept that ~8-10% of users behind strict symmetric NATs can't connect. Revisit if demand warrants it. |
+| **TURN** | **Metered Open Relay** (auto) or custom coturn | Client-side HMAC-SHA1 credentials via Web Crypto API. Custom TURN for organizations with their own server. Disable option for local networks. |
 
 ---
 
@@ -274,8 +275,7 @@ No more "TBD" — decisions made for simplicity and speed:
 ### M3 — Collaborative Editing (1-2 weeks)
 - TipTap notepad with Yjs collaboration
 - Multi-cursor awareness (names + colors)
-- Export notepad as Markdown
-- Export poll/poker results as text
+- Export notepad as Markdown, plain text, or JSON
 
 ### M4 — Polish (1 week)
 - Mobile-optimized UI
@@ -336,10 +336,10 @@ Instead of full audio/video (which needs TURN):
 
 ## Open Questions (Reduced)
 
-1. **Trystero strategy** — Nostr relays vs BitTorrent trackers vs MQTT as primary? Nostr seems most reliable. Test all three and pick the best, with fallback.
+1. ~~**Trystero strategy**~~ — **RESOLVED**: MQTT brokers (primary) + BitTorrent trackers (secondary) as dual-path signaling. Nostr was dropped due to unreliable relays.
 2. **Participant cap** — Hard 6 or soft limit with degradation warning?
 3. **Naming** — "CollabSpace" is generic. Something shorter and memorable? "Huddle"? "Meshup"? "Peerly"?
-4. **Export format** — Markdown for everything, or structured JSON for programmatic use?
+4. ~~**Export format**~~ — **RESOLVED**: Notepad exports as Markdown, plain text, or JSON. Users choose format at export time.
 
 ---
 

@@ -9,6 +9,7 @@ export type ConnectionSettings = {
     username?: string;
     credential?: string;
   };
+  autoReconnect: boolean;
 };
 
 export const DEFAULT_MQTT_SERVERS = [
@@ -33,6 +34,7 @@ export function getDefaultSettings(): ConnectionSettings {
     mqtt: { enabled: true, servers: [...DEFAULT_MQTT_SERVERS] },
     torrent: { enabled: true, servers: [...DEFAULT_TORRENT_SERVERS] },
     turn: { mode: 'auto' },
+    autoReconnect: true,
   };
 }
 
@@ -44,6 +46,10 @@ export function getConnectionSettings(): ConnectionSettings {
     // Validate: at least one strategy must be enabled
     if (!parsed.mqtt?.enabled && !parsed.torrent?.enabled) {
       parsed.mqtt = { enabled: true, servers: [...DEFAULT_MQTT_SERVERS] };
+    }
+    // Backward compatibility: default autoReconnect to true if missing
+    if (parsed.autoReconnect === undefined) {
+      parsed.autoReconnect = true;
     }
     return parsed;
   } catch {

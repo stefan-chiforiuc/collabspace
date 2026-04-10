@@ -4,6 +4,8 @@ import type { ConnectionStatus } from '../lib/trystero';
 interface ConnectionStatusProps {
   status: ConnectionStatus;
   isConnected: boolean;
+  autoReconnect: boolean;
+  onRetry?: () => void;
   onClose: () => void;
 }
 
@@ -11,6 +13,7 @@ export default function ConnectionStatusPanel(props: ConnectionStatusProps) {
   const mqttOk = () => props.status.mqtt.connected > 0;
   const torrentOk = () => props.status.torrent.connected > 0;
   const anyConnected = () => mqttOk() || torrentOk();
+  const hasClosedRelays = () => props.status.relays.some(r => r.state === 'closed');
 
   return (
     <div class="absolute top-12 right-2 z-30 w-72 sm:w-80 bg-surface-800/95 backdrop-blur-sm border border-surface-700 rounded-xl shadow-2xl animate-fade-in overflow-hidden">
@@ -132,6 +135,18 @@ export default function ConnectionStatusPanel(props: ConnectionStatusProps) {
           </Show>
         </div>
       </div>
+
+      {/* Manual retry button — shown when auto-reconnect is off and relays have failed */}
+      <Show when={!props.autoReconnect && hasClosedRelays()}>
+        <div class="px-3 py-2 border-t border-surface-700/50">
+          <button
+            onClick={() => props.onRetry?.()}
+            class="w-full text-[11px] font-medium text-primary-400 hover:text-primary-300 bg-primary-500/10 hover:bg-primary-500/15 rounded-lg py-2 cursor-pointer transition-colors"
+          >
+            Retry Connections
+          </button>
+        </div>
+      </Show>
     </div>
   );
 }
