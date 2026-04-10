@@ -1,6 +1,6 @@
 import { createSignal, Show, For } from 'solid-js';
-import type { ConnectionSettings, TurnMode } from '../lib/connection-settings';
-import { getDefaultSettings } from '../lib/connection-settings';
+import type { ConnectionSettings, TurnProvider } from '../lib/connection-settings';
+import { getDefaultSettings, genTurnId } from '../lib/connection-settings';
 import Button from './ui/Button';
 
 interface ConnectionSettingsPanelProps {
@@ -16,13 +16,15 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
   const [mqttServers, setMqttServers] = createSignal([...props.settings.mqtt.servers]);
   const [torrentEnabled, setTorrentEnabled] = createSignal(props.settings.torrent.enabled);
   const [torrentServers, setTorrentServers] = createSignal([...props.settings.torrent.servers]);
-  const [turnMode, setTurnMode] = createSignal<TurnMode>(props.settings.turn.mode);
-  const [customUrl, setCustomUrl] = createSignal(props.settings.turn.customUrl || '');
-  const [customUser, setCustomUser] = createSignal(props.settings.turn.username || '');
-  const [customCred, setCustomCred] = createSignal(props.settings.turn.credential || '');
+  const [turnProviders, setTurnProviders] = createSignal<TurnProvider[]>(
+    props.settings.turn.providers.map(p => ({ ...p }))
+  );
   const [autoReconnect, setAutoReconnect] = createSignal(props.settings.autoReconnect);
   const [newServer, setNewServer] = createSignal('');
-  const [addingTo, setAddingTo] = createSignal<'mqtt' | 'torrent' | null>(null);
+  const [addingTo, setAddingTo] = createSignal<'mqtt' | 'torrent' | 'turn' | null>(null);
+  const [newTurnUrl, setNewTurnUrl] = createSignal('');
+  const [newTurnUser, setNewTurnUser] = createSignal('');
+  const [newTurnCred, setNewTurnCred] = createSignal('');
 
   const isValid = () => mqttEnabled() || torrentEnabled();
 
@@ -31,12 +33,7 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
     const s: ConnectionSettings = {
       mqtt: { enabled: mqttEnabled(), servers: mqttServers() },
       torrent: { enabled: torrentEnabled(), servers: torrentServers() },
-      turn: {
-        mode: turnMode(),
-        customUrl: turnMode() === 'custom' ? customUrl() : undefined,
-        username: turnMode() === 'custom' ? customUser() : undefined,
-        credential: turnMode() === 'custom' ? customCred() : undefined,
-      },
+      turn: { providers: turnProviders() },
       autoReconnect: autoReconnect(),
     };
     props.onApply(s);
@@ -48,11 +45,8 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
     setMqttServers([...d.mqtt.servers]);
     setTorrentEnabled(d.torrent.enabled);
     setTorrentServers([...d.torrent.servers]);
-    setTurnMode(d.turn.mode);
+    setTurnProviders(d.turn.providers.map(p => ({ ...p })));
     setAutoReconnect(d.autoReconnect);
-    setCustomUrl('');
-    setCustomUser('');
-    setCustomCred('');
   };
 
   const removeServer = (strategy: 'mqtt' | 'torrent', index: number) => {
@@ -72,6 +66,33 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
       setTorrentServers(s => [...s, url]);
     }
     setNewServer('');
+    setAddingTo(null);
+  };
+
+  const toggleTurnProvider = (id: string) => {
+    setTurnProviders(ps => ps.map(p => p.id === id ? { ...p, enabled: !p.enabled } : p));
+  };
+
+  const removeTurnProvider = (id: string) => {
+    setTurnProviders(ps => ps.filter(p => p.id !== id));
+  };
+
+  const addTurnProvider = () => {
+    const url = newTurnUrl().trim();
+    if (!url) return;
+    const provider: TurnProvider = {
+      id: genTurnId(),
+      label: 'Custom',
+      urls: [url],
+      credentialType: newTurnUser().trim() ? 'static' : 'none',
+      username: newTurnUser().trim() || undefined,
+      credential: newTurnCred().trim() || undefined,
+      enabled: true,
+    };
+    setTurnProviders(ps => [...ps, provider]);
+    setNewTurnUrl('');
+    setNewTurnUser('');
+    setNewTurnCred('');
     setAddingTo(null);
   };
 
@@ -190,45 +211,87 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
             </Show>
           </div>
 
-          {/* TURN */}
-          <div class="px-3 py-2.5 border-b border-surface-700/50 space-y-2">
-            <span class="text-xs font-medium text-surface-300">TURN Relay</span>
-            <div class="space-y-1.5">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="turn" checked={turnMode() === 'auto'} onChange={() => setTurnMode('auto')} class="accent-primary-500" />
-                <span class="text-[11px] text-surface-300">Auto (Open Relay)</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="turn" checked={turnMode() === 'custom'} onChange={() => setTurnMode('custom')} class="accent-primary-500" />
-                <span class="text-[11px] text-surface-300">Custom server</span>
-              </label>
-              <Show when={turnMode() === 'custom'}>
-                <div class="space-y-1.5 pl-5">
+          {/* TURN Providers */}
+          <div class="px-3 py-2.5 border-b border-surface-700/50">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-medium text-surface-300">TURN Relay Servers</span>
+              <span class="text-[10px] text-surface-500">
+                {turnProviders().filter(p => p.enabled).length}/{turnProviders().length} enabled
+              </span>
+            </div>
+            <div class="space-y-1">
+              <For each={turnProviders()}>
+                {(provider) => (
+                  <div class="flex items-center justify-between gap-1 py-0.5">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <button
+                        onClick={() => toggleTurnProvider(provider.id)}
+                        class={`w-3.5 h-3.5 rounded border shrink-0 cursor-pointer transition-colors ${
+                          provider.enabled
+                            ? 'bg-purple-600 border-purple-500'
+                            : 'bg-surface-700 border-surface-600'
+                        }`}
+                      >
+                        <Show when={provider.enabled}>
+                          <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 16 16" fill="none">
+                            <path d="M4 8l3 3 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                        </Show>
+                      </button>
+                      <div class="min-w-0">
+                        <span class={`text-[11px] truncate block ${provider.enabled ? 'text-surface-300' : 'text-surface-500'}`}>
+                          {provider.label}
+                        </span>
+                        <span class="text-[9px] text-surface-600 truncate block">
+                          {hostname(provider.urls[0])}
+                          {provider.credentialType === 'hmac-openrelay' ? ' (HMAC)' : provider.credentialType === 'static' ? ' (static)' : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <Show when={!provider.builtin}>
+                      <button
+                        onClick={() => removeTurnProvider(provider.id)}
+                        class="text-[10px] text-surface-500 hover:text-error cursor-pointer px-1 shrink-0"
+                      >x</button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+
+              <Show when={addingTo() === 'turn'}>
+                <div class="space-y-1 mt-1.5 pl-0.5">
                   <input
                     class="w-full bg-surface-900 border border-surface-600 rounded px-2 py-1 text-[11px] text-surface-200 placeholder:text-surface-500"
-                    placeholder="turns://your-server.com:443"
-                    value={customUrl()}
-                    onInput={(e) => setCustomUrl(e.currentTarget.value)}
+                    placeholder="turn:your-server.com:443?transport=tcp"
+                    value={newTurnUrl()}
+                    onInput={(e) => setNewTurnUrl(e.currentTarget.value)}
                   />
                   <input
                     class="w-full bg-surface-900 border border-surface-600 rounded px-2 py-1 text-[11px] text-surface-200 placeholder:text-surface-500"
-                    placeholder="Username"
-                    value={customUser()}
-                    onInput={(e) => setCustomUser(e.currentTarget.value)}
+                    placeholder="Username (optional)"
+                    value={newTurnUser()}
+                    onInput={(e) => setNewTurnUser(e.currentTarget.value)}
                   />
                   <input
                     class="w-full bg-surface-900 border border-surface-600 rounded px-2 py-1 text-[11px] text-surface-200 placeholder:text-surface-500"
-                    placeholder="Credential"
+                    placeholder="Credential (optional)"
                     type="password"
-                    value={customCred()}
-                    onInput={(e) => setCustomCred(e.currentTarget.value)}
+                    value={newTurnCred()}
+                    onInput={(e) => setNewTurnCred(e.currentTarget.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTurnProvider()}
                   />
+                  <div class="flex gap-1">
+                    <button onClick={addTurnProvider} class="text-[10px] text-primary-400 hover:text-primary-300 cursor-pointer px-1">Add</button>
+                    <button onClick={() => { setAddingTo(null); setNewTurnUrl(''); setNewTurnUser(''); setNewTurnCred(''); }} class="text-[10px] text-surface-500 cursor-pointer px-1">Cancel</button>
+                  </div>
                 </div>
               </Show>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="turn" checked={turnMode() === 'disabled'} onChange={() => setTurnMode('disabled')} class="accent-primary-500" />
-                <span class="text-[11px] text-surface-300">Disabled</span>
-              </label>
+              <Show when={addingTo() !== 'turn'}>
+                <button
+                  onClick={() => setAddingTo('turn')}
+                  class="text-[10px] text-primary-400 hover:text-primary-300 cursor-pointer mt-0.5"
+                >+ Add custom TURN server</button>
+              </Show>
             </div>
           </div>
 

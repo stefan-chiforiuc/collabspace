@@ -88,7 +88,8 @@ export function createTrysteroRoom(
   diag('info', `selfId=${selfId} selfIdMatch=${selfIdMatch}`);
   diag('info', `MQTT enabled=${settings.mqtt.enabled} servers=${settings.mqtt.servers.length}`);
   diag('info', `Torrent enabled=${settings.torrent.enabled} servers=${settings.torrent.servers.length}`);
-  diag('info', `TURN mode=${settings.turn.mode} turnServers=${turnServers.length}`);
+  const enabledTurnCount = settings.turn.providers.filter(p => p.enabled).length;
+  diag('info', `TURN providers=${enabledTurnCount}/${settings.turn.providers.length} enabled, turnServers=${turnServers.length}`);
   if (turnServers.length > 0) {
     diag('info', `TURN urls=${JSON.stringify(turnServers.map(t => typeof t.urls === 'string' ? t.urls : t.urls[0]))}`);
   }
@@ -202,16 +203,10 @@ export function createTrysteroRoom(
   }
 
   // Resolve TURN display info
-  const turnInfo = (() => {
-    if (settings.turn.mode === 'disabled') return null;
-    if (settings.turn.mode === 'custom' && settings.turn.customUrl) {
-      return { mode: 'custom', url: settings.turn.customUrl };
-    }
-    if (settings.turn.mode === 'auto') {
-      return { mode: 'open-relay', url: 'global.relay.metered.ca' };
-    }
-    return null;
-  })();
+  const enabledProviders = settings.turn.providers.filter(p => p.enabled);
+  const turnInfo = enabledProviders.length > 0
+    ? { mode: `${enabledProviders.length} provider(s)`, url: enabledProviders.map(p => p.label).join(', ') }
+    : null;
 
   // Track previous relay states to detect changes
   let prevRelayStates: Record<string, string> = {};
