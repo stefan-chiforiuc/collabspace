@@ -29,6 +29,7 @@ export interface TrysteroRoom {
   onPeerLeave: (cb: (peerId: string) => void) => void;
   getPeers: () => string[];
   getConnectionStatus: () => ConnectionStatus;
+  hasFailedRelays: () => boolean;
   leave: () => void;
 }
 
@@ -193,6 +194,10 @@ export function createTrysteroRoom(
     onPeerLeave: (cb) => leaveCallbacks.push(cb),
     getPeers: () => [...peers],
     getConnectionStatus,
+    hasFailedRelays: () => {
+      const status = getConnectionStatus();
+      return status.relays.some(r => r.state === 'closed');
+    },
     leave: () => {
       disconnectTimers.forEach((t) => clearTimeout(t));
       disconnectTimers.clear();

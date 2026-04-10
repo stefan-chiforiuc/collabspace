@@ -54,6 +54,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   let provider: TrysteroProvider | null = null;
   let statusInterval: ReturnType<typeof setInterval> | null = null;
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+  let autoReconnectInterval: ReturnType<typeof setInterval> | null = null;
 
   // Track chat messages (bound to doc, survives reconnect)
   const chatArray = doc.getArray('chat');
@@ -124,12 +125,23 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
       // Creator is "connected" immediately (they're the first one in)
       setConnectionState('connected');
     }
+
+    // Auto-reconnect polling — detect failed relays and rebuild transport
+    if (autoReconnectInterval) clearInterval(autoReconnectInterval);
+    if (settings().autoReconnect) {
+      autoReconnectInterval = setInterval(() => {
+        if (trystero?.hasFailedRelays() && connectionState() === 'connected') {
+          reconnect();
+        }
+      }, 15_000);
+    }
   }
 
   // Tear down current transport (preserves doc)
   function teardownTransport() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     if (connectionTimeout) { clearTimeout(connectionTimeout); connectionTimeout = null; }
+    if (autoReconnectInterval) { clearInterval(autoReconnectInterval); autoReconnectInterval = null; }
     provider?.destroy();
     trystero?.leave();
     provider = null;
@@ -191,6 +203,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
       sendChatMessage(doc, text, String(doc.clientID), name);
     },
     reconnect,
+    retryFailedConnections: () => reconnect(),
     leave,
   };
 }

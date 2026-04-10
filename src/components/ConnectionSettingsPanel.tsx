@@ -20,6 +20,7 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
   const [customUrl, setCustomUrl] = createSignal(props.settings.turn.customUrl || '');
   const [customUser, setCustomUser] = createSignal(props.settings.turn.username || '');
   const [customCred, setCustomCred] = createSignal(props.settings.turn.credential || '');
+  const [autoReconnect, setAutoReconnect] = createSignal(props.settings.autoReconnect);
   const [newServer, setNewServer] = createSignal('');
   const [addingTo, setAddingTo] = createSignal<'mqtt' | 'torrent' | null>(null);
 
@@ -36,6 +37,7 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
         username: turnMode() === 'custom' ? customUser() : undefined,
         credential: turnMode() === 'custom' ? customCred() : undefined,
       },
+      autoReconnect: autoReconnect(),
     };
     props.onApply(s);
   };
@@ -47,6 +49,7 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
     setTorrentEnabled(d.torrent.enabled);
     setTorrentServers([...d.torrent.servers]);
     setTurnMode(d.turn.mode);
+    setAutoReconnect(d.autoReconnect);
     setCustomUrl('');
     setCustomUser('');
     setCustomCred('');
@@ -226,6 +229,22 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
                 <input type="radio" name="turn" checked={turnMode() === 'disabled'} onChange={() => setTurnMode('disabled')} class="accent-primary-500" />
                 <span class="text-[11px] text-surface-300">Disabled</span>
               </label>
+            </div>
+          </div>
+
+          {/* Auto-Reconnect */}
+          <div class="px-3 py-2.5 border-b border-surface-700/50">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-xs font-medium text-surface-300">Auto-Reconnect</span>
+                <p class="text-[10px] text-surface-500 mt-0.5">Automatically retry failed relay connections</p>
+              </div>
+              <button
+                onClick={() => setAutoReconnect(!autoReconnect())}
+                class={`w-9 h-5 rounded-full transition-colors cursor-pointer ${autoReconnect() ? 'bg-primary-600' : 'bg-surface-600'}`}
+              >
+                <span class={`block w-3.5 h-3.5 rounded-full bg-white transition-transform mx-0.5 ${autoReconnect() ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
             </div>
           </div>
         </div>

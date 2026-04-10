@@ -236,6 +236,8 @@ export default function RoomView(props: RoomViewProps) {
             <ConnectionStatusPanel
               status={room.connectionStatus()}
               isConnected={room.isConnected()}
+              autoReconnect={room.connectionSettings().autoReconnect}
+              onRetry={() => room.retryFailedConnections()}
               onClose={() => setShowConnectionStatus(false)}
             />
           </Show>
