@@ -1,14 +1,25 @@
-import { joinRoom as mqttJoin, getRelaySockets as getMqttSockets } from '@trystero-p2p/mqtt';
-import { joinRoom as torrentJoin, getRelaySockets as getTorrentSockets } from '@trystero-p2p/torrent';
+import { joinRoom as mqttJoin, getRelaySockets as getMqttSockets, selfId as mqttSelfId } from '@trystero-p2p/mqtt';
+import { joinRoom as torrentJoin, getRelaySockets as getTorrentSockets, selfId as torrentSelfId } from '@trystero-p2p/torrent';
 import type { Room } from 'trystero';
 import { APP_ID, DISCONNECT_GRACE_MS, MAX_PARTICIPANTS } from './constants';
 import type { ConnectionSettings } from './connection-settings';
 import type { TurnServerConfig } from './turn-config';
 
+// Diagnostic: verify selfId is shared between strategies (same @trystero-p2p/core instance)
+export const selfId = mqttSelfId;
+const selfIdMatch = mqttSelfId === torrentSelfId;
+console.log(`[CollabSpace] selfId=${mqttSelfId} mqtt/torrent match=${selfIdMatch}`);
+
 export type RelayStatus = {
   url: string;
   strategy: 'mqtt' | 'torrent';
   state: 'connecting' | 'open' | 'closed';
+};
+
+export type DiagnosticEvent = {
+  time: number;
+  type: 'relay' | 'peer' | 'info' | 'error';
+  message: string;
 };
 
 export type ConnectionStatus = {
@@ -17,6 +28,11 @@ export type ConnectionStatus = {
   turn: { mode: string; url: string } | null;
   relays: RelayStatus[];
   peerCount: number;
+  selfId: string;
+  selfIdMatch: boolean;
+  roomCode: string;
+  appId: string;
+  diagnostics: DiagnosticEvent[];
 };
 
 export interface TrysteroRoom {
@@ -50,25 +66,55 @@ export function createTrysteroRoom(
   turnServers: TurnServerConfig[] = [],
 ): TrysteroRoom {
   const turnConfig = turnServers.length > 0 ? turnServers : undefined;
+  const diagnostics: DiagnosticEvent[] = [];
+  const diag = (type: DiagnosticEvent['type'], message: string) => {
+    const event = { time: Date.now(), type, message };
+    diagnostics.push(event);
+    if (diagnostics.length > 100) diagnostics.shift();
+    console.log(`[CollabSpace:${type}] ${message}`);
+  };
+
+  diag('info', `Creating room: appId=${APP_ID} roomCode=${roomCode}`);
+  diag('info', `selfId=${selfId} selfIdMatch=${selfIdMatch}`);
+  diag('info', `MQTT enabled=${settings.mqtt.enabled} servers=${settings.mqtt.servers.length}`);
+  diag('info', `Torrent enabled=${settings.torrent.enabled} servers=${settings.torrent.servers.length}`);
+  diag('info', `TURN mode=${settings.turn.mode} turnServers=${turnServers.length}`);
+  if (turnServers.length > 0) {
+    diag('info', `TURN urls=${JSON.stringify(turnServers.map(t => typeof t.urls === 'string' ? t.urls : t.urls[0]))}`);
+  }
 
   // Conditionally create strategy rooms based on settings
-  const mqttRoom = settings.mqtt.enabled && settings.mqtt.servers.length > 0
-    ? mqttJoin({
+  let mqttRoom: Room | null = null;
+  if (settings.mqtt.enabled && settings.mqtt.servers.length > 0) {
+    try {
+      diag('relay', `Joining MQTT room "${roomCode}" via ${settings.mqtt.servers.join(', ')}`);
+      mqttRoom = mqttJoin({
         appId: APP_ID,
         relayUrls: settings.mqtt.servers,
         relayRedundancy: Math.min(settings.mqtt.servers.length, 4),
         turnConfig,
-      }, roomCode)
-    : null;
+      }, roomCode);
+      diag('relay', 'MQTT joinRoom call succeeded');
+    } catch (err) {
+      diag('error', `MQTT joinRoom failed: ${err}`);
+    }
+  }
 
-  const torrentRoom = settings.torrent.enabled && settings.torrent.servers.length > 0
-    ? torrentJoin({
+  let torrentRoom: Room | null = null;
+  if (settings.torrent.enabled && settings.torrent.servers.length > 0) {
+    try {
+      diag('relay', `Joining Torrent room "${roomCode}" via ${settings.torrent.servers.join(', ')}`);
+      torrentRoom = torrentJoin({
         appId: APP_ID,
         relayUrls: settings.torrent.servers,
         relayRedundancy: Math.min(settings.torrent.servers.length, 3),
         turnConfig,
-      }, roomCode)
-    : null;
+      }, roomCode);
+      diag('relay', 'Torrent joinRoom call succeeded');
+    } catch (err) {
+      diag('error', `Torrent joinRoom failed: ${err}`);
+    }
+  }
 
   // At least one strategy must be active
   const primaryRoom = mqttRoom || torrentRoom;
@@ -103,36 +149,46 @@ export function createTrysteroRoom(
   const joinCallbacks: ((peerId: string) => void)[] = [];
   const leaveCallbacks: ((peerId: string) => void)[] = [];
 
-  const handlePeerJoin = (peerId: string) => {
+  const handlePeerJoin = (source: string) => (peerId: string) => {
+    diag('peer', `PEER JOIN via ${source}: peerId=${peerId} (already known=${peers.has(peerId)})`);
     const timer = disconnectTimers.get(peerId);
     if (timer) {
       clearTimeout(timer);
       disconnectTimers.delete(peerId);
+      diag('peer', `Cleared disconnect timer for ${peerId}`);
     }
-    if (peers.size >= MAX_PARTICIPANTS && !peers.has(peerId)) return;
+    if (peers.size >= MAX_PARTICIPANTS && !peers.has(peerId)) {
+      diag('peer', `Rejected peer ${peerId}: room full (${peers.size}/${MAX_PARTICIPANTS})`);
+      return;
+    }
     if (!peers.has(peerId)) {
       peers.add(peerId);
+      diag('peer', `New peer added: ${peerId} (total peers: ${peers.size})`);
       joinCallbacks.forEach((cb) => cb(peerId));
     }
   };
 
-  const handlePeerLeave = (peerId: string) => {
+  const handlePeerLeave = (source: string) => (peerId: string) => {
+    diag('peer', `PEER LEAVE via ${source}: peerId=${peerId} (known=${peers.has(peerId)})`);
     if (!peers.has(peerId)) return;
     const timer = setTimeout(() => {
       peers.delete(peerId);
       disconnectTimers.delete(peerId);
+      diag('peer', `Peer removed after grace period: ${peerId} (total peers: ${peers.size})`);
       leaveCallbacks.forEach((cb) => cb(peerId));
     }, DISCONNECT_GRACE_MS);
     disconnectTimers.set(peerId, timer);
   };
 
   if (mqttRoom) {
-    mqttRoom.onPeerJoin(handlePeerJoin);
-    mqttRoom.onPeerLeave(handlePeerLeave);
+    mqttRoom.onPeerJoin(handlePeerJoin('mqtt'));
+    mqttRoom.onPeerLeave(handlePeerLeave('mqtt'));
+    diag('relay', 'MQTT peer handlers registered');
   }
   if (torrentRoom) {
-    torrentRoom.onPeerJoin(handlePeerJoin);
-    torrentRoom.onPeerLeave(handlePeerLeave);
+    torrentRoom.onPeerJoin(handlePeerJoin('torrent'));
+    torrentRoom.onPeerLeave(handlePeerLeave('torrent'));
+    diag('relay', 'Torrent peer handlers registered');
   }
 
   // Resolve TURN display info
@@ -147,6 +203,9 @@ export function createTrysteroRoom(
     return null;
   })();
 
+  // Track previous relay states to detect changes
+  let prevRelayStates: Record<string, string> = {};
+
   const getConnectionStatus = (): ConnectionStatus => {
     const relays: RelayStatus[] = [];
     let mqttConnected = 0;
@@ -154,19 +213,36 @@ export function createTrysteroRoom(
 
     if (settings.mqtt.enabled) {
       const sockets = getMqttSockets();
+      const socketCount = Object.keys(sockets).length;
+      if (socketCount === 0 && settings.mqtt.servers.length > 0) {
+        diag('relay', `MQTT: getRelaySockets returned 0 sockets (expected ${settings.mqtt.servers.length})`);
+      }
       for (const [url, ws] of Object.entries(sockets)) {
         const state = getSocketState(ws as WebSocket);
         if (state === 'open') mqttConnected++;
         relays.push({ url, strategy: 'mqtt', state });
+        // Log state changes
+        if (prevRelayStates[url] !== state) {
+          diag('relay', `MQTT ${url}: ${prevRelayStates[url] || 'new'} → ${state}`);
+          prevRelayStates[url] = state;
+        }
       }
     }
 
     if (settings.torrent.enabled) {
       const sockets = getTorrentSockets();
+      const socketCount = Object.keys(sockets).length;
+      if (socketCount === 0 && settings.torrent.servers.length > 0) {
+        diag('relay', `Torrent: getRelaySockets returned 0 sockets (expected ${settings.torrent.servers.length})`);
+      }
       for (const [url, ws] of Object.entries(sockets)) {
         const state = getSocketState(ws as WebSocket);
         if (state === 'open') torrentConnected++;
         relays.push({ url, strategy: 'torrent', state });
+        if (prevRelayStates[url] !== state) {
+          diag('relay', `Torrent ${url}: ${prevRelayStates[url] || 'new'} → ${state}`);
+          prevRelayStates[url] = state;
+        }
       }
     }
 
@@ -176,6 +252,11 @@ export function createTrysteroRoom(
       turn: turnInfo,
       relays,
       peerCount: peers.size,
+      selfId,
+      selfIdMatch,
+      roomCode,
+      appId: APP_ID,
+      diagnostics: [...diagnostics],
     };
   };
 
