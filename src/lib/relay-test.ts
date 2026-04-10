@@ -159,10 +159,11 @@ export async function testTurnConnectivity(
 
       pc.onicecandidate = (e) => {
         if (e.candidate) {
-          const typeMatch = e.candidate.candidate.match(/typ (\w+)/);
+          const raw = e.candidate.candidate;
+          const typeMatch = raw.match(/typ (\w+)/);
           const ctype = typeMatch?.[1] ?? 'unknown';
           candidateTypes.push(ctype);
-          console.log(`[CollabSpace:test] TURN candidate: ${ctype} ${e.candidate.candidate.slice(0, 80)}`);
+          console.log(`[CollabSpace:test] TURN candidate: type=${ctype} raw="${raw}"`);
 
           if (ctype === 'relay') {
             hasRelay = true;

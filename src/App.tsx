@@ -15,8 +15,8 @@ export default function App() {
         </Match>
         <Match when={route().page === 'room'}>
           {(() => {
-            const r = route() as { page: 'room'; roomCode: string; password?: string; isCreator: boolean };
-            return <RoomView roomCode={r.roomCode} password={r.password} isCreator={r.isCreator} />;
+            const r = route() as { page: 'room'; roomCode: string; password?: string; isCreator: boolean; sharedTurn?: import('./lib/turn-config').TurnServerConfig[] };
+            return <RoomView roomCode={r.roomCode} password={r.password} isCreator={r.isCreator} sharedTurn={r.sharedTurn} />;
           })()}
         </Match>
       </Switch>
