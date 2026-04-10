@@ -1,4 +1,4 @@
-import type { ConnectionSettings } from './connection-settings';
+import type { ConnectionSettings, TurnProvider } from './connection-settings';
 
 export type TurnServerConfig = {
   urls: string | string[];
@@ -9,14 +9,9 @@ export type TurnServerConfig = {
 // Metered Open Relay — publicly documented shared secret for open-source WebRTC projects.
 // See: https://www.metered.ca/tools/openrelay/
 const OPEN_RELAY_SECRET = 'openrelayprojectsecret';
-const OPEN_RELAY_URLS = [
-  'turns:global.relay.metered.ca:443?transport=tcp',
-  'turn:global.relay.metered.ca:80?transport=tcp',
-  'turn:global.relay.metered.ca:443?transport=tcp',
-];
 
 /** Generate HMAC-SHA1 time-limited credentials for the Metered open relay (RFC 5389). */
-export async function generateOpenRelayCredentials(): Promise<TurnServerConfig> {
+export async function generateOpenRelayCredentials(): Promise<{ username: string; credential: string }> {
   const expiry = Math.floor(Date.now() / 1000) + 24 * 3600; // 24 hours
   const username = String(expiry);
 
@@ -31,29 +26,26 @@ export async function generateOpenRelayCredentials(): Promise<TurnServerConfig> 
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(username));
   const credential = btoa(String.fromCharCode(...new Uint8Array(signature)));
 
-  return {
-    urls: OPEN_RELAY_URLS,
-    username,
-    credential,
-  };
+  return { username, credential };
 }
 
-/** Build the TURN server config array based on user settings. */
-export async function buildTurnServers(settings: ConnectionSettings): Promise<TurnServerConfig[]> {
-  switch (settings.turn.mode) {
-    case 'auto':
-      return [await generateOpenRelayCredentials()];
-
-    case 'custom': {
-      if (!settings.turn.customUrl) return [];
-      return [{
-        urls: settings.turn.customUrl,
-        username: settings.turn.username,
-        credential: settings.turn.credential,
-      }];
+/** Build credentials for a single TURN provider. */
+async function buildProviderConfig(provider: TurnProvider): Promise<TurnServerConfig> {
+  switch (provider.credentialType) {
+    case 'hmac-openrelay': {
+      const creds = await generateOpenRelayCredentials();
+      return { urls: provider.urls, username: creds.username, credential: creds.credential };
     }
-
-    case 'disabled':
-      return [];
+    case 'static':
+      return { urls: provider.urls, username: provider.username, credential: provider.credential };
+    case 'none':
+      return { urls: provider.urls };
   }
+}
+
+/** Build the TURN server config array from all enabled providers. */
+export async function buildTurnServers(settings: ConnectionSettings): Promise<TurnServerConfig[]> {
+  const enabledProviders = settings.turn.providers.filter(p => p.enabled && p.urls.length > 0);
+  if (enabledProviders.length === 0) return [];
+  return Promise.all(enabledProviders.map(buildProviderConfig));
 }
