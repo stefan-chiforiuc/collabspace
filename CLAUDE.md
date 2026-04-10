@@ -4,14 +4,15 @@
 CollabSpace v2 is a zero-infrastructure P2P collaboration PWA. Static site only, no custom servers. Full requirements in `requirements-v2.md`.
 
 ## Tech Stack
-- **Framework:** SolidJS or Svelte 5
-- **Networking:** Trystero (Nostr strategy) — zero-config P2P signaling
+- **Framework:** SolidJS
+- **Networking:** Trystero (MQTT + BitTorrent dual strategy) — zero-config P2P signaling
 - **State Sync:** Yjs (CRDT)
 - **Rich Text:** TipTap + Yjs binding
-- **Styling:** UnoCSS or Tailwind CSS
+- **Media:** Trystero built-in WebRTC media streams (audio/video)
+- **Styling:** Tailwind CSS v4
 - **Build:** Vite + vite-plugin-pwa
 - **Testing:** Vitest + Playwright
-- **Deployment:** GitHub Pages / Cloudflare Pages
+- **Deployment:** GitHub Pages
 
 ## Agent System
 This project uses a multi-agent workflow. Agents are in `.claude/agents/`:

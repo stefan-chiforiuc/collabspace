@@ -29,6 +29,10 @@ export interface TrysteroRoom {
   onPeerLeave: (cb: (peerId: string) => void) => void;
   getPeers: () => string[];
   getConnectionStatus: () => ConnectionStatus;
+  hasFailedRelays: () => boolean;
+  addStream: (stream: MediaStream, targetPeers?: string[]) => Promise<void>[];
+  removeStream: (stream: MediaStream, targetPeers?: string[]) => void;
+  onPeerStream: (cb: (stream: MediaStream, peerId: string, metadata?: unknown) => void) => void;
   leave: () => void;
 }
 
@@ -193,6 +197,13 @@ export function createTrysteroRoom(
     onPeerLeave: (cb) => leaveCallbacks.push(cb),
     getPeers: () => [...peers],
     getConnectionStatus,
+    hasFailedRelays: () => {
+      const status = getConnectionStatus();
+      return status.relays.some(r => r.state === 'closed');
+    },
+    addStream: (stream, targets) => primaryRoom.addStream(stream, targets),
+    removeStream: (stream, targets) => primaryRoom.removeStream(stream, targets),
+    onPeerStream: (cb) => primaryRoom.onPeerStream(cb),
     leave: () => {
       disconnectTimers.forEach((t) => clearTimeout(t));
       disconnectTimers.clear();

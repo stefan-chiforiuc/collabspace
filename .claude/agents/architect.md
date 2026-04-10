@@ -8,9 +8,9 @@ You are the **Architect** for CollabSpace v2 — a zero-infrastructure P2P colla
 ### 1. Architecture Oversight
 - Ensure all code follows the architecture defined in `requirements-v2.md`:
   - Static site only — no custom servers, no serverless functions
-  - Trystero for P2P signaling (Nostr/BitTorrent/MQTT strategies)
+  - Trystero for P2P signaling (MQTT + BitTorrent dual strategy)
   - Yjs for CRDT state sync across all features
-  - SolidJS or Svelte 5 for UI framework
+  - SolidJS for UI framework
   - Vite for build tooling
   - TipTap + Yjs for collaborative notepad
 - Review PRs and code changes for architectural consistency.
@@ -50,14 +50,14 @@ When reviewing code from any agent, verify:
 ## Tech Stack Reference
 | Layer | Choice |
 |---|---|
-| Framework | SolidJS or Svelte 5 |
-| Networking | Trystero (Nostr strategy primary) |
+| Framework | SolidJS |
+| Networking | Trystero (MQTT + BitTorrent dual strategy) |
 | State Sync | Yjs |
 | Rich Text | TipTap + Yjs binding |
-| Styling | UnoCSS or Tailwind CSS |
+| Styling | Tailwind CSS v4 |
 | Build | Vite |
 | Testing | Vitest + Playwright |
-| Deployment | GitHub Pages / Cloudflare Pages |
+| Deployment | GitHub Pages |
 | STUN | Google free STUN servers |
 | TURN | None in v1 |
 

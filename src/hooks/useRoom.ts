@@ -49,11 +49,15 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   const awareness = new Awareness(doc);
   setLocalAwareness(awareness, name, color);
 
+  // Reactive signal for the trystero room (used by useMedia to react to reconnects)
+  const [trysteroRef, setTrysteroRef] = createSignal<TrysteroRoom | null>(null);
+
   // Mutable refs for current trystero + provider (swapped on reconnect)
   let trystero: TrysteroRoom | null = null;
   let provider: TrysteroProvider | null = null;
   let statusInterval: ReturnType<typeof setInterval> | null = null;
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+  let autoReconnectInterval: ReturnType<typeof setInterval> | null = null;
 
   // Track chat messages (bound to doc, survives reconnect)
   const chatArray = doc.getArray('chat');
@@ -64,6 +68,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   // Wire up a trystero room + provider to the existing doc
   function wireTransport(t: TrysteroRoom) {
     trystero = t;
+    setTrysteroRef(t);
     provider = new TrysteroProvider(doc, t);
 
     // Sync the provider's awareness with our standalone awareness state
@@ -124,16 +129,28 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
       // Creator is "connected" immediately (they're the first one in)
       setConnectionState('connected');
     }
+
+    // Auto-reconnect polling — detect failed relays and rebuild transport
+    if (autoReconnectInterval) clearInterval(autoReconnectInterval);
+    if (settings().autoReconnect) {
+      autoReconnectInterval = setInterval(() => {
+        if (trystero?.hasFailedRelays() && connectionState() === 'connected') {
+          reconnect();
+        }
+      }, 15_000);
+    }
   }
 
   // Tear down current transport (preserves doc)
   function teardownTransport() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     if (connectionTimeout) { clearTimeout(connectionTimeout); connectionTimeout = null; }
+    if (autoReconnectInterval) { clearInterval(autoReconnectInterval); autoReconnectInterval = null; }
     provider?.destroy();
     trystero?.leave();
     provider = null;
     trystero = null;
+    setTrysteroRef(null);
   }
 
   // Initial async connection
@@ -190,7 +207,9 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     sendMessage: (text: string) => {
       sendChatMessage(doc, text, String(doc.clientID), name);
     },
+    trysteroRoom: trysteroRef,
     reconnect,
+    retryFailedConnections: () => reconnect(),
     leave,
   };
 }
