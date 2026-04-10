@@ -12,6 +12,7 @@ import { getConnectionSettings, saveConnectionSettings, type ConnectionSettings 
 import { buildTurnServers, type TurnServerConfig } from '../lib/turn-config';
 import { createMqttRelay, type RelayTransport } from '../lib/mqtt-relay';
 import { publishTurnCredentials, watchSharedTurnCredentials } from '../lib/turn-sharing';
+import { generateCloudflareCredentials } from '../lib/cloudflare-turn';
 import type { Participant, ChatMessage } from '../lib/types';
 
 export type RoomConnectionState = 'connecting' | 'connected' | 'relay' | 'failed';
@@ -229,7 +230,11 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     setConnectionState('connecting');
     setIsConnected(false);
     try {
-      const turnServers = [...(await buildTurnServers(s)), ...(extraTurnServers || [])];
+      const settingsTurn = await buildTurnServers(s);
+      // Also try Cloudflare TURN if configured
+      const cfCreds = await generateCloudflareCredentials();
+      const cfTurn: TurnServerConfig[] = cfCreds ? [cfCreds] : [];
+      const turnServers = [...settingsTurn, ...cfTurn, ...(extraTurnServers || [])];
       localTurnServers = turnServers;
       const t = createTrysteroRoom(roomCode, s, turnServers);
       wireTransport(t);

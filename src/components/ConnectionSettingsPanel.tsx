@@ -1,6 +1,11 @@
 import { createSignal, Show, For } from 'solid-js';
 import type { ConnectionSettings, TurnProvider } from '../lib/connection-settings';
 import { getDefaultSettings, genTurnId } from '../lib/connection-settings';
+import {
+  loadCloudflareConfig, saveCloudflareConfig, clearCloudflareConfig,
+  testCloudflareSetup, WORKER_SOURCE_CODE,
+  type CloudflareConfig,
+} from '../lib/cloudflare-turn';
 import Button from './ui/Button';
 
 interface ConnectionSettingsPanelProps {
@@ -25,6 +30,58 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
   const [newTurnUrl, setNewTurnUrl] = createSignal('');
   const [newTurnUser, setNewTurnUser] = createSignal('');
   const [newTurnCred, setNewTurnCred] = createSignal('');
+
+  // Cloudflare TURN wizard
+  const [showCfSetup, setShowCfSetup] = createSignal(false);
+  const existingCf = loadCloudflareConfig();
+  const [cfMode, setCfMode] = createSignal<'worker' | 'direct'>(existingCf?.mode || 'worker');
+  const [cfWorkerUrl, setCfWorkerUrl] = createSignal(existingCf?.workerUrl || '');
+  const [cfKeyId, setCfKeyId] = createSignal(existingCf?.keyId || '');
+  const [cfApiToken, setCfApiToken] = createSignal(existingCf?.apiToken || '');
+  const [cfTestResult, setCfTestResult] = createSignal<string | null>(null);
+  const [cfTesting, setCfTesting] = createSignal(false);
+  const cfConfigured = () => !!(existingCf?.workerUrl || existingCf?.keyId);
+
+  const handleCfTest = async () => {
+    setCfTesting(true);
+    setCfTestResult(null);
+    const config: CloudflareConfig = {
+      mode: cfMode(),
+      workerUrl: cfMode() === 'worker' ? cfWorkerUrl().trim() : undefined,
+      keyId: cfMode() === 'direct' ? cfKeyId().trim() : undefined,
+      apiToken: cfMode() === 'direct' ? cfApiToken().trim() : undefined,
+    };
+    const result = await testCloudflareSetup(config);
+    if (result.ok && result.credentials) {
+      saveCloudflareConfig(config);
+      // Add as a TURN provider
+      setTurnProviders(ps => {
+        const filtered = ps.filter(p => p.id !== 'cloudflare');
+        return [...filtered, {
+          id: 'cloudflare',
+          label: 'Cloudflare TURN',
+          urls: Array.isArray(result.credentials!.urls) ? result.credentials!.urls as string[] : [result.credentials!.urls as string],
+          credentialType: 'static' as const,
+          username: result.credentials!.username,
+          credential: result.credentials!.credential,
+          enabled: true,
+        }];
+      });
+      setCfTestResult('OK — Cloudflare TURN added as provider');
+    } else {
+      setCfTestResult(`Failed: ${result.error}`);
+    }
+    setCfTesting(false);
+  };
+
+  const handleCfRemove = () => {
+    clearCloudflareConfig();
+    setTurnProviders(ps => ps.filter(p => p.id !== 'cloudflare'));
+    setCfWorkerUrl('');
+    setCfKeyId('');
+    setCfApiToken('');
+    setCfTestResult(null);
+  };
 
   const isValid = () => mqttEnabled() || torrentEnabled();
 
@@ -293,6 +350,97 @@ export default function ConnectionSettingsPanel(props: ConnectionSettingsPanelPr
                 >+ Add custom TURN server</button>
               </Show>
             </div>
+          </div>
+
+          {/* Cloudflare TURN Setup */}
+          <div class="px-3 py-2.5 border-b border-surface-700/50">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-surface-300">Cloudflare TURN</span>
+              <Show when={cfConfigured()} fallback={
+                <button
+                  onClick={() => setShowCfSetup(!showCfSetup())}
+                  class="text-[10px] font-medium text-purple-400 hover:text-purple-300 cursor-pointer"
+                >
+                  {showCfSetup() ? 'Hide' : 'Setup'}
+                </button>
+              }>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] text-success">Configured</span>
+                  <button onClick={handleCfRemove} class="text-[10px] text-surface-500 hover:text-error cursor-pointer">Remove</button>
+                </div>
+              </Show>
+            </div>
+            <p class="text-[10px] text-surface-500 mb-2">1 TB/month free. Best reliability (global anycast).</p>
+
+            <Show when={showCfSetup()}>
+              <div class="space-y-2 bg-surface-900/50 rounded-lg p-2">
+                <div class="text-[10px] text-surface-400 space-y-1">
+                  <p>1. Create a free <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener" class="text-primary-400 underline">Cloudflare account</a></p>
+                  <p>2. Go to Dashboard &rarr; Calls &rarr; TURN Keys &rarr; Create Key</p>
+                  <p>3. Choose a setup method below:</p>
+                </div>
+
+                <div class="flex gap-2">
+                  <button
+                    onClick={() => setCfMode('worker')}
+                    class={`text-[10px] px-2 py-1 rounded cursor-pointer ${cfMode() === 'worker' ? 'bg-purple-500/20 text-purple-400' : 'bg-surface-700 text-surface-400'}`}
+                  >Worker URL</button>
+                  <button
+                    onClick={() => setCfMode('direct')}
+                    class={`text-[10px] px-2 py-1 rounded cursor-pointer ${cfMode() === 'direct' ? 'bg-purple-500/20 text-purple-400' : 'bg-surface-700 text-surface-400'}`}
+                  >Direct API</button>
+                </div>
+
+                <Show when={cfMode() === 'worker'}>
+                  <div class="space-y-1">
+                    <p class="text-[9px] text-surface-500">Deploy the Worker code, then paste your Worker URL:</p>
+                    <input
+                      class="w-full bg-surface-900 border border-surface-600 rounded px-2 py-1 text-[11px] text-surface-200 placeholder:text-surface-500"
+                      placeholder="https://your-turn-proxy.workers.dev"
+                      value={cfWorkerUrl()}
+                      onInput={(e) => setCfWorkerUrl(e.currentTarget.value)}
+                    />
+                    <details class="text-[9px] text-surface-500">
+                      <summary class="cursor-pointer text-primary-400">View Worker code</summary>
+                      <pre class="mt-1 bg-surface-900 rounded p-2 overflow-x-auto text-[8px] leading-tight max-h-32 overflow-y-auto">{WORKER_SOURCE_CODE}</pre>
+                    </details>
+                  </div>
+                </Show>
+
+                <Show when={cfMode() === 'direct'}>
+                  <div class="space-y-1">
+                    <p class="text-[9px] text-surface-500">Paste your TURN Key ID and API Token (may fail due to CORS):</p>
+                    <input
+                      class="w-full bg-surface-900 border border-surface-600 rounded px-2 py-1 text-[11px] text-surface-200 placeholder:text-surface-500"
+                      placeholder="TURN Key ID"
+                      value={cfKeyId()}
+                      onInput={(e) => setCfKeyId(e.currentTarget.value)}
+                    />
+                    <input
+                      class="w-full bg-surface-900 border border-surface-600 rounded px-2 py-1 text-[11px] text-surface-200 placeholder:text-surface-500"
+                      placeholder="API Token"
+                      type="password"
+                      value={cfApiToken()}
+                      onInput={(e) => setCfApiToken(e.currentTarget.value)}
+                    />
+                  </div>
+                </Show>
+
+                <button
+                  onClick={handleCfTest}
+                  disabled={cfTesting()}
+                  class="w-full text-[10px] font-medium text-purple-400 hover:text-purple-300 disabled:text-surface-600 bg-purple-500/10 hover:bg-purple-500/15 rounded py-1.5 cursor-pointer disabled:cursor-wait transition-colors"
+                >
+                  {cfTesting() ? 'Testing...' : 'Test & Save'}
+                </button>
+
+                <Show when={cfTestResult()}>
+                  <div class={`text-[10px] ${cfTestResult()!.startsWith('OK') ? 'text-success' : 'text-error'}`}>
+                    {cfTestResult()}
+                  </div>
+                </Show>
+              </div>
+            </Show>
           </div>
 
           {/* Auto-Reconnect */}
