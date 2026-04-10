@@ -8,6 +8,7 @@ CollabSpace v2 is a zero-infrastructure P2P collaboration PWA. Static site only,
 - **Networking:** Trystero (MQTT + BitTorrent dual strategy) — zero-config P2P signaling
 - **State Sync:** Yjs (CRDT)
 - **Rich Text:** TipTap + Yjs binding
+- **Media:** Trystero built-in WebRTC media streams (audio/video)
 - **Styling:** Tailwind CSS v4
 - **Build:** Vite + vite-plugin-pwa
 - **Testing:** Vitest + Playwright

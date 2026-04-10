@@ -49,6 +49,9 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   const awareness = new Awareness(doc);
   setLocalAwareness(awareness, name, color);
 
+  // Reactive signal for the trystero room (used by useMedia to react to reconnects)
+  const [trysteroRef, setTrysteroRef] = createSignal<TrysteroRoom | null>(null);
+
   // Mutable refs for current trystero + provider (swapped on reconnect)
   let trystero: TrysteroRoom | null = null;
   let provider: TrysteroProvider | null = null;
@@ -65,6 +68,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   // Wire up a trystero room + provider to the existing doc
   function wireTransport(t: TrysteroRoom) {
     trystero = t;
+    setTrysteroRef(t);
     provider = new TrysteroProvider(doc, t);
 
     // Sync the provider's awareness with our standalone awareness state
@@ -146,6 +150,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     trystero?.leave();
     provider = null;
     trystero = null;
+    setTrysteroRef(null);
   }
 
   // Initial async connection
@@ -202,6 +207,7 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     sendMessage: (text: string) => {
       sendChatMessage(doc, text, String(doc.clientID), name);
     },
+    trysteroRoom: trysteroRef,
     reconnect,
     retryFailedConnections: () => reconnect(),
     leave,

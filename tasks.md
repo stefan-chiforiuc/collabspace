@@ -57,3 +57,32 @@
 | T-028 | Performance audit | done | qa-agent | should | M4 | Code-split TipTap (38KB main gzip), lazy chunk, 8 precached |
 | T-029 | Final security audit | done | architect | must | M4 | No credentials, SHA-256 passwords, hash routing, input sanitized |
 | T-030 | Visual QA pass | done | uiux-designer | should | M4 | Mobile responsive, dark theme consistent, design tokens applied |
+
+## Milestone M5a — Share Button
+
+| ID | Title | Status | Agent | Priority | Milestone | Notes |
+|----|-------|--------|-------|----------|-----------|-------|
+| T-031 | Share panel component (QR, WhatsApp, copy link, native share) | done | frontend-expert | must | M5a | SharePanel.tsx with QR code, WhatsApp link, Web Share API |
+| T-032 | QR code + share utilities | done | backend-expert | must | M5a | src/lib/share.ts, qrcode-generator dependency |
+| T-033 | Replace Copy Link with Share button in header | done | frontend-expert | must | M5a | Header button + dropdown panel |
+
+## Milestone M5b — Notification System
+
+| ID | Title | Status | Agent | Priority | Milestone | Notes |
+|----|-------|--------|-------|----------|-----------|-------|
+| T-034 | Notification data model + Yjs integration | done | backend-expert | must | M5b | Y.Array dispatch, TTL pruning, rate limiting |
+| T-035 | useNotifications hook | done | backend-expert | must | M5b | Observes Y.Array, filters self, max 3 stacked, auto-dismiss 8s |
+| T-036 | NotificationToast component | done | frontend-expert | must | M5b | Slide-in-right toasts, action button, dismiss, progress bar |
+| T-037 | Notification triggers (poker, polls, timer) | done | backend-expert | must | M5b | dispatchNotification in usePoker, usePolls, useTimer |
+| T-038 | Notification integration in RoomView | done | frontend-expert | must | M5b | Toast rendering, action handler switches tabs |
+
+## Milestone M5c — Audio/Video Sharing
+
+| ID | Title | Status | Agent | Priority | Milestone | Notes |
+|----|-------|--------|-------|----------|-----------|-------|
+| T-039 | Extend TrysteroRoom for media streams | done | backend-expert | must | M5c | addStream, removeStream, onPeerStream via primaryRoom |
+| T-040 | useMedia hook | done | backend-expert | must | M5c | getUserMedia, toggle audio/video, remote streams, awareness sync |
+| T-041 | Media controls (mic/camera toggles in header) | done | frontend-expert | must | M5c | Active/inactive/muted states, accessibility |
+| T-042 | VideoGrid component | done | frontend-expert | must | M5c | Responsive grid, video tiles, name overlay, mute indicator |
+| T-043 | Media awareness + notification integration | done | backend-expert | must | M5c | Media state in awareness, notification on start |
+| T-044 | Audio-only strip + trysteroRoom signal from useRoom | done | backend-expert | should | M5c | Minimal indicator strip, reactive trysteroRoom signal |

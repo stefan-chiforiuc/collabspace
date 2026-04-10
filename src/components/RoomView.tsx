@@ -5,8 +5,11 @@ import { usePoker } from '../hooks/usePoker';
 import { useTimer } from '../hooks/useTimer';
 import { useReactions } from '../hooks/useReactions';
 import { useNotepad } from '../hooks/useNotepad';
+import { useNotifications } from '../hooks/useNotifications';
+import { useMedia } from '../hooks/useMedia';
 import { hasRoomPassword, verifyRoomPassword } from '../lib/room-password';
 import { saveConnectionSettings } from '../lib/connection-settings';
+import { dispatchNotification } from '../lib/notifications';
 import ParticipantList from './ParticipantList';
 import ChatPanel from './ChatPanel';
 import PollPanel from './PollPanel';
@@ -17,6 +20,10 @@ import ReactionsBar from './ReactionsBar';
 import PasswordGate from './PasswordGate';
 import ConnectionStatusPanel from './ConnectionStatus';
 import ConnectionSettingsPanel from './ConnectionSettingsPanel';
+import SharePanel from './SharePanel';
+import NotificationToast from './NotificationToast';
+import MediaControls from './MediaControls';
+import VideoGrid from './VideoGrid';
 import Button from './ui/Button';
 import Card from './ui/Card';
 
@@ -53,10 +60,17 @@ export default function RoomView(props: RoomViewProps) {
   };
   const notepad = useNotepad(room.doc, room.awareness, room.localName, localColor());
 
+  // Notification system
+  const notifs = useNotifications(room.doc, room.localPeerId());
+
+  // Media (audio/video)
+  const media = useMedia(room.trysteroRoom, room.awareness, room.localPeerId());
+
   const [activeTab, setActiveTab] = createSignal<Tab>('chat');
   const [showParticipants, setShowParticipants] = createSignal(false);
   const [showConnectionStatus, setShowConnectionStatus] = createSignal(false);
   const [showConnectionSettings, setShowConnectionSettings] = createSignal(false);
+  const [showSharePanel, setShowSharePanel] = createSignal(false);
 
   // Password gate for joiners
   if (!props.isCreator) {
@@ -97,12 +111,8 @@ export default function RoomView(props: RoomViewProps) {
     }
   };
 
-  const handleCopyLink = async () => {
-    const url = `${window.location.origin}${window.location.pathname}#/room/${props.roomCode}`;
-    await navigator.clipboard.writeText(url);
-  };
-
   const handleLeave = () => {
+    media.stopAllMedia();
     room.leave();
     window.location.hash = '/';
   };
@@ -110,6 +120,30 @@ export default function RoomView(props: RoomViewProps) {
   const handleSettingsApply = async (settings: Parameters<typeof saveConnectionSettings>[0]) => {
     setShowConnectionSettings(false);
     await room.reconnect(settings);
+  };
+
+  const handleNotificationAction = (notif: { type: string; targetTab?: string }) => {
+    if (notif.type === 'media_started') {
+      if (!media.audioEnabled()) media.toggleAudio();
+    } else if (notif.targetTab) {
+      setActiveTab(notif.targetTab as Tab);
+    }
+  };
+
+  const handleToggleAudio = async () => {
+    const wasEnabled = media.audioEnabled();
+    await media.toggleAudio();
+    if (!wasEnabled && media.audioEnabled()) {
+      dispatchNotification(room.doc, 'media_started', room.localPeerId(), room.localName, `${room.localName} started audio`, undefined);
+    }
+  };
+
+  const handleToggleVideo = async () => {
+    const wasEnabled = media.videoEnabled();
+    await media.toggleVideo();
+    if (!wasEnabled && media.videoEnabled()) {
+      dispatchNotification(room.doc, 'media_started', room.localPeerId(), room.localName, `${room.localName} started video`, undefined);
+    }
   };
 
   return (
@@ -166,6 +200,13 @@ export default function RoomView(props: RoomViewProps) {
       {/* Main room view */}
       <Show when={passwordVerified() && room.connectionState() !== 'failed'}>
         <div class="h-screen flex flex-col relative">
+          {/* Notification toasts */}
+          <NotificationToast
+            notifications={notifs.notifications()}
+            onAction={handleNotificationAction}
+            onDismiss={notifs.dismiss}
+          />
+
           {/* Header */}
           <header class="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 border-b border-surface-700 bg-surface-800/80 backdrop-blur-sm" role="banner">
             <div class="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -213,6 +254,13 @@ export default function RoomView(props: RoomViewProps) {
                 </div>
                 <span class="text-[10px] text-surface-400 ml-0.5">{room.participants().length}</span>
               </button>
+              {/* Media controls (mic + camera) */}
+              <MediaControls
+                audioEnabled={media.audioEnabled()}
+                videoEnabled={media.videoEnabled()}
+                onToggleAudio={handleToggleAudio}
+                onToggleVideo={handleToggleVideo}
+              />
               {/* Compact timer */}
               <Show when={timer.state().mode !== 'stopped'}>
                 <span class={`font-mono text-xs px-2 py-0.5 rounded hidden sm:inline ${timer.expired() ? 'bg-error/20 text-error animate-pulse' : 'bg-surface-700 text-surface-300'}`} role="timer">
@@ -221,9 +269,13 @@ export default function RoomView(props: RoomViewProps) {
               </Show>
             </div>
             <div class="flex items-center gap-1 sm:gap-2 shrink-0">
-              <Button variant="ghost" size="sm" onClick={handleCopyLink} class="text-xs sm:text-sm">
-                <span class="hidden sm:inline">Copy Link</span>
-                <span class="sm:hidden">Copy</span>
+              <Button variant="ghost" size="sm" onClick={() => setShowSharePanel(!showSharePanel())} class="text-xs sm:text-sm">
+                <span class="hidden sm:inline">Share</span>
+                <span class="sm:hidden">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+                  </svg>
+                </span>
               </Button>
               <Button variant="ghost" size="sm" onClick={handleLeave} class="text-xs sm:text-sm">
                 Leave
@@ -249,6 +301,14 @@ export default function RoomView(props: RoomViewProps) {
               onApply={handleSettingsApply}
               onClose={() => setShowConnectionSettings(false)}
               showReconnect
+            />
+          </Show>
+
+          {/* Share panel dropdown */}
+          <Show when={showSharePanel()}>
+            <SharePanel
+              roomCode={props.roomCode}
+              onClose={() => setShowSharePanel(false)}
             />
           </Show>
 
@@ -280,6 +340,29 @@ export default function RoomView(props: RoomViewProps) {
 
             {/* Main panel */}
             <div class="flex-1 flex flex-col min-w-0">
+              {/* Video grid (shown when anyone has media active) */}
+              <Show when={media.anyVideoActive()}>
+                <VideoGrid
+                  localStream={media.localStream()}
+                  remoteStreams={media.remoteStreams()}
+                  participants={room.participants()}
+                  localPeerId={room.localPeerId()}
+                  audioEnabled={media.audioEnabled()}
+                  videoEnabled={media.videoEnabled()}
+                  peerMediaState={media.peerMediaState()}
+                />
+              </Show>
+
+              {/* Audio-only strip (shown when audio active but no video) */}
+              <Show when={media.anyMediaActive() && !media.anyVideoActive()}>
+                <div class="flex items-center gap-2 px-3 py-1.5 border-b border-surface-700 bg-surface-800/50 text-xs text-surface-400">
+                  <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" class="text-success shrink-0">
+                    <path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clip-rule="evenodd"/>
+                  </svg>
+                  <span>Audio call active</span>
+                </div>
+              </Show>
+
               <nav class="flex border-b border-surface-700 bg-surface-800/50 overflow-x-auto" role="tablist" aria-label="Room features">
                 <For each={TABS}>
                   {(tab) => (

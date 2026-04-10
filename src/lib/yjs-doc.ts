@@ -1,5 +1,6 @@
 import * as Y from 'yjs';
 import type { RoomMeta, ChatMessage, Reaction } from './types';
+import type { NotificationEvent } from './notifications';
 
 export function createYDoc(meta: RoomMeta, isCreator: boolean): Y.Doc {
   const doc = new Y.Doc();
@@ -19,6 +20,7 @@ export function createYDoc(meta: RoomMeta, isCreator: boolean): Y.Doc {
   doc.getMap('poker');
   doc.getMap('timer');
   doc.getArray<Reaction>('reactions');
+  doc.getArray<NotificationEvent>('notifications');
   doc.getXmlFragment('notepad');
 
   return doc;

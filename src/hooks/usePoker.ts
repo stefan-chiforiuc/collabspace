@@ -9,6 +9,7 @@ import {
   getPokerState,
   calculatePokerResults,
 } from '../lib/poker';
+import { dispatchNotification } from '../lib/notifications';
 import type { PokerRound, CardSet } from '../lib/types';
 
 export function usePoker(doc: Y.Doc, localPeerId: string, localName: string) {
@@ -29,6 +30,7 @@ export function usePoker(doc: Y.Doc, localPeerId: string, localName: string) {
     state,
     startRound: (topic: string, cardSet: CardSet) => {
       startPokerRound(doc, topic, cardSet, localPeerId, localName);
+      dispatchNotification(doc, 'poker_started', localPeerId, localName, `${localName} started Planning Poker`, 'poker');
     },
     vote: (card: string) => {
       submitVote(doc, localPeerId, card);
