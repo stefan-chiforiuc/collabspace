@@ -45,10 +45,13 @@ No other new dependencies needed — trystero already provides the media API, an
 
 ### Files to Create
 
-**`src/lib/qr-code.ts`** — QR code generation
-- Generate QR code as data URL using `qrcode-generator` library
-- Input: room URL string → Output: data URL for `<img>` tag
-- Keep it simple — single function export
+**`src/lib/share.ts`** — Share utilities (extracted from RoomView inline logic)
+- `getShareUrl(roomCode)` — constructs full URL (currently inline at RoomView:101)
+- `copyToClipboard(text)` — wraps navigator.clipboard.writeText with error handling
+- `canUseWebShareAPI()` — feature-detects navigator.share
+- `shareViaWebAPI(roomCode)` — calls navigator.share({ title, url })
+- `getWhatsAppShareUrl(roomCode)` — returns `https://wa.me/?text=...` URL
+- `generateQRCodeSVG(text, size)` — uses qrcode-generator to produce SVG string
 
 **`src/components/SharePanel.tsx`** — Share dropdown/modal
 - Triggered by new "Share" button in header (replaces "Copy Link")
@@ -111,38 +114,43 @@ No other new dependencies needed — trystero already provides the media API, an
 
 ### Architecture
 
-Notifications use **Yjs awareness protocol** (not persisted in the doc). Each peer sets a `notification` field in their awareness state when they trigger a feature. Other peers' `useNotifications` hook observes awareness changes and shows toasts.
+**Recommended: Yjs Y.Array** (not awareness) for notification dispatch.
 
-**Why awareness (not Y.Array)?**
-- Notifications are ephemeral — they don't need to survive page reload
-- Awareness auto-cleans when a peer disconnects
-- No garbage collection needed
-- Same pattern as existing reactions/raise-hand
-
-### Notification Data Model
+Awareness is per-client state — it works for "who has their hand raised" but not well for "dispatch an event to everyone." If Peer A sets a `lastNotification` field, there's no clean way to know if all peers have received it before clearing. **Y.Array with TTL-based pruning** is simpler and matches the existing reactions pattern exactly (append-only, prune entries older than the auto-dismiss timeout).
 
 ```typescript
-// In awareness state
+// Yjs doc schema addition:
+// doc.getArray<NotificationEvent>('notifications')
+
 interface NotificationEvent {
+  id: string;
   type: 'poker_started' | 'poll_created' | 'timer_started' | 'media_started' | 'chat_message';
+  fromPeerId: string;
+  fromPeerName: string;
   message: string;          // "Alex started Planning Poker"
   targetTab?: Tab;          // Which tab to switch to (if applicable)
-  timestamp: number;        // For deduplication
-  id: string;               // Unique ID to prevent re-showing
+  timestamp: number;        // For deduplication + TTL pruning
 }
-
-// Set via awareness:
-awareness.setLocalStateField('notification', event);
-// Clear after 1 second (other peers will have picked it up):
-setTimeout(() => awareness.setLocalStateField('notification', null), 1000);
 ```
+
+**Dispatch flow:**
+1. Hook calls `dispatchNotification(doc, event)` → pushes to Y.Array
+2. Y.Array syncs to all peers via Yjs CRDT
+3. Each peer's `useNotifications` hook observes the array, filters out self-events, and shows toasts
+4. Entries older than 15s are pruned automatically (slightly longer than 8s display to handle clock drift)
+
+**Rate limiting:** For chat messages, only dispatch one `chat_message` notification per 5 seconds to avoid spam.
 
 ### Files to Create
 
 **`src/lib/notifications.ts`** — Notification types and helpers
 - `NotificationType` union type
 - `NotificationEvent` interface
-- `emitNotification(awareness, event)` — sets awareness field + auto-clears
+- `getNotifications(doc)` — returns the notifications Y.Array
+- `dispatchNotification(doc, type, fromPeerId, fromPeerName, message, targetTab?)` — pushes event to Y.Array
+- `getActiveNotifications(doc, localPeerId)` — returns events from last 8s, excluding self
+- `pruneNotifications(doc)` — removes entries older than 15s
+- `NOTIFICATION_DISPLAY_MS = 8000` — auto-dismiss timeout
 - `NOTIFICATION_ICONS` map — emoji/icon per notification type
 - `NOTIFICATION_ACTIONS` map — action label per type ("Go to Poker", "Go to Chat", etc.)
 
@@ -173,6 +181,15 @@ setTimeout(() => awareness.setLocalStateField('notification', null), 1000);
 - Style: bg-surface-800/95, border-primary-500/30 left accent, backdrop-blur
 
 ### Files to Modify
+
+**`src/lib/yjs-doc.ts`** — Add `notifications` Y.Array to the doc schema
+- Add `doc.getArray<NotificationEvent>('notifications')` accessor function
+
+**`src/lib/types.ts`** — Add notification types
+- Add `NotificationType` union, `NotificationEvent` interface
+
+**`src/app.css`** — Add slide-in-right animation for toasts
+- New keyframes: `slide-in-right` (200ms, ease-out) matching existing `slide-in-left` pattern
 
 **`src/hooks/usePolls.ts`** — Add notification emit on `createPoll`
 ```typescript
@@ -324,6 +341,18 @@ export function useMedia(
 - Clicking when active: toggles mute/camera
 - Long-press or secondary action: stops media entirely
 
+### Critical: Expose TrysteroRoom from useRoom
+
+The `useMedia` hook needs access to the `TrysteroRoom` object to call `addStream`, `onPeerStream`, etc. Currently `trystero` is a private `let` inside `useRoom` that changes on reconnect.
+
+**Modify `src/hooks/useRoom.ts`:**
+- Add a signal: `const [trysteroRef, setTrysteroRef] = createSignal<TrysteroRoom | null>(null);`
+- Set it in `wireTransport`: `setTrysteroRef(t);`
+- Clear it in `teardownTransport`: `setTrysteroRef(null);`
+- Return `trysteroRoom: trysteroRef` from the hook
+
+The `useMedia` hook reacts to `trysteroRoom()` changes. On reconnect, it re-registers `onPeerStream` handlers and re-adds the local stream to the new room. Remote streams are cleared (peers will re-send when the new connection is established).
+
 ### Files to Modify
 
 **`src/lib/trystero.ts`** — Extend TrysteroRoom interface
@@ -351,6 +380,14 @@ export interface MediaState {
   videoEnabled: boolean;
 }
 ```
+Also extend `Participant` with optional `audioEnabled?: boolean; videoEnabled?: boolean` fields.
+
+**`src/lib/participants.ts`** — Read media awareness state
+- In `getParticipantList`, read `state.media?.audioEnabled` and `state.media?.videoEnabled` from awareness and include in returned Participant objects.
+
+**`src/components/ParticipantList.tsx`** — Show media indicators
+- Small mic/camera icons next to participant names when audio/video is active
+- Colored primary-400 when on, hidden when off
 
 ### UI Design (Audio/Video)
 
@@ -458,11 +495,14 @@ Add entries after each milestone is completed (following existing format with Wh
 
 | Risk | Mitigation |
 |------|------------|
-| **Video mesh at 6 peers is bandwidth-heavy** | Conservative constraints: 320x240 @ 15fps. Consider SFU for future scaling. |
+| **Video mesh at 6 peers is bandwidth-heavy** | Conservative constraints: 320x240 @ 15fps. Auto-lower to 240p when >3 peers. Consider SFU for future scaling. |
 | **TURN relay rate limits** | Metered Open Relay is shared/rate-limited. Document that custom TURN recommended for heavy video use. |
 | **getUserMedia permission denied** | Graceful error handling with clear UI message. Don't block other features. |
-| **Bundle size increase** | QR library is ~3KB. Media code is all browser APIs + trystero (already included). Lazy-load VideoGrid. |
-| **Mobile video performance** | Lower constraints on mobile. Audio-only fallback. Test on real devices. |
+| **Bundle size increase** | QR library ~3KB, notifications ~2KB, media ~4KB ≈ 10KB total. Well within 200KB budget. Lazy-load VideoGrid + QR. |
+| **Mobile video performance** | Lower constraints on mobile. Audio-only fallback. Test on real devices. `playsinline` critical for iOS Safari. |
+| **Dual-strategy media routing** | Media goes through `primaryRoom` only (MQTT or BitTorrent, whichever is first). If a peer connects only via the secondary strategy, they won't receive media. Acceptable v1 limitation with TURN enabled. |
+| **Media on reconnect** | When `reconnect()` rebuilds transport, `useMedia` must re-register `onPeerStream` and re-add local stream. Remote streams cleared (peers re-send). |
+| **Notification spam** | Rate-limit chat notifications to 1 per 5s. Other notification types are infrequent by nature. |
 
 ---
 
