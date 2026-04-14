@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, Show, For } from 'solid-js';
+import { createSignal, createEffect, Show, For } from 'solid-js';
 import { useRoom } from '../hooks/useRoom';
 import { usePolls } from '../hooks/usePolls';
 import { usePoker } from '../hooks/usePoker';
@@ -7,7 +7,6 @@ import { useReactions } from '../hooks/useReactions';
 import { useNotepad } from '../hooks/useNotepad';
 import { useNotifications } from '../hooks/useNotifications';
 import { useMedia } from '../hooks/useMedia';
-import { hasRoomPassword, verifyRoomPassword } from '../lib/room-password';
 import { saveConnectionSettings } from '../lib/connection-settings';
 import { dispatchNotification } from '../lib/notifications';
 import ParticipantList from './ParticipantList';
@@ -47,11 +46,30 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function RoomView(props: RoomViewProps) {
-  const [passwordVerified, setPasswordVerified] = createSignal(props.isCreator);
   const [passwordError, setPasswordError] = createSignal('');
-  const [checkingPassword, setCheckingPassword] = createSignal(!props.isCreator);
+  const [passwordAttempts, setPasswordAttempts] = createSignal(0);
 
   const room = useRoom(props.roomCode, props.password, props.isCreator, props.sharedTurn);
+
+  // The password gate is driven entirely by the encryption auth state.
+  // A joiner whose key doesn't match the creator's will receive an auth
+  // canary that fails to decrypt under their key; the provider flips
+  // authState to 'failed' and we surface the gate. Creators never hit
+  // this path (they ARE the key source).
+  const showPasswordGate = () =>
+    !props.isCreator && room.authState() === 'failed';
+
+  // React to auth state changes:
+  //  - verified: clear any lingering error
+  //  - failed (after at least one retry): show "incorrect password"
+  createEffect(() => {
+    const s = room.authState();
+    if (s === 'verified') {
+      setPasswordError('');
+    } else if (s === 'failed' && passwordAttempts() > 0) {
+      setPasswordError('Incorrect password. Please try again.');
+    }
+  });
   const polls = usePolls(room.doc, room.localPeerId(), room.localName);
   const poker = usePoker(room.doc, room.localPeerId(), room.localName);
   const timer = useTimer(room.doc, room.localPeerId(), room.localName);
@@ -75,43 +93,24 @@ export default function RoomView(props: RoomViewProps) {
   const [showConnectionSettings, setShowConnectionSettings] = createSignal(false);
   const [showSharePanel, setShowSharePanel] = createSignal(false);
 
-  // Password gate for joiners
-  if (!props.isCreator) {
-    const meta = room.doc.getMap('meta');
-    let resolved = false;
-
-    const resolve = (hasPassword: boolean) => {
-      if (resolved) return;
-      resolved = true;
-      setCheckingPassword(false);
-      setPasswordVerified(!hasPassword);
-    };
-
-    const checkPassword = () => {
-      if (hasRoomPassword(room.doc)) {
-        resolve(true);
-      } else if (meta.get('roomCode')) {
-        resolve(false);
-      }
-    };
-
-    checkPassword();
-    meta.observe(checkPassword);
-
-    const timeout = setTimeout(() => {
-      if (!resolved) resolve(false);
-    }, 10_000);
-    onCleanup(() => clearTimeout(timeout));
-  }
-
   const handlePasswordSubmit = async (attempt: string) => {
-    const valid = await verifyRoomPassword(room.doc, attempt);
-    if (valid) {
-      setPasswordVerified(true);
-      setPasswordError('');
-    } else {
-      setPasswordError('Incorrect password. Please try again.');
-    }
+    setPasswordError('');
+    setPasswordAttempts((n) => n + 1);
+    await room.setPassword(attempt);
+    // authState will transition to 'verified' (success) or back to
+    // 'failed' (wrong again) once the next canary arrives; the effect
+    // above surfaces the appropriate UI state.
+  };
+
+  // Derived signals used by the corporate-network fallback panel. A
+  // "failed relay" is one whose underlying WebSocket never opened — the
+  // signature of a firewall/proxy/captive-portal blocking the signaling.
+  const failedRelays = () =>
+    room.connectionStatus().relays.filter((r) => r.state === 'closed');
+  const totalRelays = () => room.connectionStatus().relays.length;
+  const allRelaysFailed = () => {
+    const total = totalRelays();
+    return total > 0 && failedRelays().length === total;
   };
 
   const handleLeave = () => {
@@ -151,14 +150,8 @@ export default function RoomView(props: RoomViewProps) {
 
   return (
     <>
-      {/* Password gate for joiners */}
-      <Show when={checkingPassword()}>
-        <div class="min-h-screen flex items-center justify-center p-4">
-          <div class="text-surface-400 text-sm animate-pulse">Connecting to room...</div>
-        </div>
-      </Show>
-
-      <Show when={!checkingPassword() && !passwordVerified()}>
+      {/* Password gate — shown only when the encryption auth canary failed */}
+      <Show when={showPasswordGate()}>
         <PasswordGate
           roomCode={props.roomCode}
           onSubmit={handlePasswordSubmit}
@@ -167,14 +160,48 @@ export default function RoomView(props: RoomViewProps) {
       </Show>
 
       {/* Connection failed — recovery screen */}
-      <Show when={passwordVerified() && room.connectionState() === 'failed'}>
+      <Show when={!showPasswordGate() && room.connectionState() === 'failed'}>
         <div class="min-h-screen flex items-center justify-center p-4">
-          <Card class="w-full max-w-sm space-y-4 text-center">
-            <div class="text-2xl">&#x26A0;&#xFE0F;</div>
-            <h2 class="text-lg font-semibold text-surface-200">Could not connect to room</h2>
-            <p class="text-surface-400 text-sm">
-              Unable to establish a P2P connection. This may be caused by a firewall or network restriction.
-            </p>
+          <Card class="w-full max-w-md space-y-4">
+            <div class="text-center space-y-2">
+              <div class="text-2xl">&#x26A0;&#xFE0F;</div>
+              <h2 class="text-lg font-semibold text-surface-200">Could not connect to room</h2>
+            </div>
+            <Show
+              when={allRelaysFailed()}
+              fallback={
+                <p class="text-surface-400 text-sm text-center">
+                  Unable to establish a P2P connection. This may be caused by a firewall or network restriction.
+                </p>
+              }
+            >
+              {/* Corporate-network fallback panel: every configured relay
+                  (MQTT brokers + BitTorrent trackers) is closed. This is
+                  almost always a firewall / proxy / captive portal issue. */}
+              <div class="space-y-3 text-sm text-surface-300">
+                <p>
+                  All <span class="font-semibold text-surface-200">{totalRelays()}</span> signaling relays failed to open.
+                  Your network is blocking the WebSocket connections CollabSpace uses to find other peers.
+                </p>
+                <div class="bg-surface-900/60 border border-surface-700 rounded-lg p-3 space-y-2">
+                  <p class="text-xs font-semibold text-surface-200 uppercase tracking-wide">Try one of these</p>
+                  <ul class="text-xs text-surface-400 space-y-1 list-disc list-inside">
+                    <li>Switch to a mobile hotspot or a different Wi-Fi network</li>
+                    <li>Disable your VPN or connect through a VPN that permits WebSockets</li>
+                    <li>Open <span class="text-surface-300">Connection Settings</span> and enable additional MQTT brokers or trackers</li>
+                    <li>Ask the room creator to share their TURN credentials in the invite link</li>
+                  </ul>
+                </div>
+                <details class="text-xs text-surface-500">
+                  <summary class="cursor-pointer hover:text-surface-300">Show failed relays ({failedRelays().length})</summary>
+                  <ul class="mt-2 space-y-0.5 font-mono text-[10px] break-all">
+                    <For each={failedRelays()}>
+                      {(r) => <li>{r.strategy}: {r.url}</li>}
+                    </For>
+                  </ul>
+                </details>
+              </div>
+            </Show>
             <div class="space-y-2">
               <Button class="w-full" onClick={() => room.reconnect()}>
                 Try Again
@@ -201,7 +228,7 @@ export default function RoomView(props: RoomViewProps) {
       </Show>
 
       {/* Main room view */}
-      <Show when={passwordVerified() && room.connectionState() !== 'failed'}>
+      <Show when={!showPasswordGate() && room.connectionState() !== 'failed'}>
         <div class="h-screen flex flex-col relative">
           {/* Notification toasts */}
           <NotificationToast

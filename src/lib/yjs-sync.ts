@@ -5,6 +5,21 @@ import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import type { TrysteroRoom } from './trystero';
 import type { RelayTransport } from './mqtt-relay';
+import { encryptPayload, decryptPayload, createCanary, verifyCanary } from './room-crypto';
+
+/**
+ * Auth state for the room-level encryption gate.
+ *
+ * - `pending`:  we've derived a key but haven't yet verified any canary
+ *               against it (either no peer is connected yet, or the
+ *               handshake is still in flight).
+ * - `verified`: at least one peer broadcast an encrypted canary that
+ *               decrypted cleanly under our key — we and they share the
+ *               same room password.
+ * - `failed`:   a peer broadcast a canary that did NOT decrypt under our
+ *               key. Our password is wrong (or tampered traffic).
+ */
+export type AuthState = 'pending' | 'verified' | 'failed';
 
 const MSG_SYNC = 0;
 const MSG_AWARENESS = 1;
@@ -22,24 +37,53 @@ export class TrysteroProvider {
   private _destroy: (() => void)[] = [];
   private syncedPeers = new Set<string>();
   private _relayActive = false;
+  private cryptoKey: CryptoKey;
+  private _authState: AuthState = 'pending';
+  private authListeners: ((state: AuthState) => void)[] = [];
 
   get relayActive() { return this._relayActive; }
+  get authState() { return this._authState; }
+  onAuthStateChange(cb: (state: AuthState) => void) {
+    this.authListeners.push(cb);
+  }
+  private setAuthState(next: AuthState) {
+    // 'verified' is sticky — once we've proven the key, don't downgrade on
+    // a later garbage packet from a tamper/noise source.
+    if (this._authState === 'verified') return;
+    if (this._authState === next) return;
+    this._authState = next;
+    this.authListeners.forEach((cb) => cb(next));
+  }
 
-  constructor(doc: Y.Doc, trystero: TrysteroRoom) {
+  /**
+   * @param doc       — the Y.Doc to sync
+   * @param trystero  — Trystero room wrapper
+   * @param cryptoKey — room-level AES-GCM key (derived from code+password).
+   *                    All outgoing payloads are encrypted with this key and
+   *                    all incoming payloads must decrypt under it to be
+   *                    accepted. This is the E2E gate that makes the MQTT
+   *                    relay fallback safe to use.
+   */
+  constructor(doc: Y.Doc, trystero: TrysteroRoom, cryptoKey: CryptoKey) {
     this.doc = doc;
     this.trystero = trystero;
+    this.cryptoKey = cryptoKey;
     this.awareness = new Awareness(doc);
 
     // Handle incoming sync messages (from WebRTC)
-    trystero.getSync((data, peerId) => this.handleIncomingSync(data, peerId));
+    trystero.getSync((data, peerId) => {
+      this.decryptAndRoute(data, (plain) => this.handleIncomingSync(plain, peerId));
+    });
 
     // Handle incoming awareness messages (from WebRTC)
     trystero.getAwareness((data, _peerId) => {
-      try {
-        applyAwarenessUpdate(this.awareness, data, this);
-      } catch {
-        // Ignore malformed awareness
-      }
+      this.decryptAndRoute(data, (plain) => {
+        try {
+          applyAwarenessUpdate(this.awareness, plain, this);
+        } catch {
+          // Ignore malformed awareness
+        }
+      });
     });
 
     // Broadcast local doc updates
@@ -49,9 +93,7 @@ export class TrysteroProvider {
       encoding.writeVarUint(encoder, MSG_SYNC);
       syncProtocol.writeUpdate(encoder, update);
       const encoded = encoding.toUint8Array(encoder);
-      // Send via WebRTC (if connected) AND relay (if active)
-      trystero.sendSync(encoded);
-      this.relay?.sendSync(encoded);
+      this.sendEncryptedSync(encoded);
     };
     doc.on('update', onUpdate);
     this._destroy.push(() => doc.off('update', onUpdate));
@@ -62,17 +104,30 @@ export class TrysteroProvider {
     }) => {
       const changed = added.concat(updated, removed);
       const update = encodeAwarenessUpdate(this.awareness, changed);
-      trystero.sendAwareness(update);
-      this.relay?.sendAwareness(update);
+      this.sendEncryptedAwareness(update);
     };
     this.awareness.on('change', onAwarenessChange);
     this._destroy.push(() => this.awareness.off('change', onAwarenessChange));
 
-    // When a new peer joins via WebRTC, initiate sync
+    // Listen for auth canaries from other peers. A canary that decrypts
+    // cleanly under our key proves we share a password with the sender.
+    trystero.getCanary((data, _peerId) => {
+      verifyCanary(this.cryptoKey, data)
+        .then((ok) => {
+          this.setAuthState(ok ? 'verified' : 'failed');
+        })
+        .catch(() => {
+          this.setAuthState('failed');
+        });
+    });
+
+    // When a new peer joins via WebRTC, initiate sync AND broadcast a canary
+    // so the remote end can confirm our password matches theirs.
     trystero.onPeerJoin((peerId) => {
       this.syncedPeers.add(peerId);
       this.sendSyncStep1(peerId);
       this.sendAwarenessTo(peerId);
+      this.sendCanaryTo(peerId);
     });
 
     trystero.onPeerLeave((peerId) => {
@@ -80,9 +135,51 @@ export class TrysteroProvider {
     });
   }
 
+  /** Send an encrypted canary to a newly joined peer. */
+  private sendCanaryTo(peerId: string) {
+    createCanary(this.cryptoKey)
+      .then((ct) => {
+        this.trystero.sendCanary(ct, [peerId]);
+      })
+      .catch(() => { /* drop */ });
+  }
+
+  /** Encrypt a plaintext payload then emit on all active transports. */
+  private sendEncryptedSync(plain: Uint8Array, targets?: string[]) {
+    encryptPayload(this.cryptoKey, plain)
+      .then((ct) => {
+        this.trystero.sendSync(ct, targets);
+        // Relay has no peer targeting — only emit non-targeted sends
+        if (!targets) this.relay?.sendSync(ct);
+      })
+      .catch(() => { /* drop on encrypt failure */ });
+  }
+
+  private sendEncryptedAwareness(plain: Uint8Array, targets?: string[]) {
+    encryptPayload(this.cryptoKey, plain)
+      .then((ct) => {
+        this.trystero.sendAwareness(ct, targets);
+        if (!targets) this.relay?.sendAwareness(ct);
+      })
+      .catch(() => { /* drop */ });
+  }
+
+  /** Decrypt an incoming payload and route the plaintext to a handler. */
+  private decryptAndRoute(data: Uint8Array, handle: (plain: Uint8Array) => void) {
+    decryptPayload(this.cryptoKey, data)
+      .then((plain) => {
+        if (plain) handle(plain);
+        // Silently drop payloads that fail auth — wrong password or
+        // tampered traffic. Never expose the raw bytes to Yjs.
+      })
+      .catch(() => { /* drop */ });
+  }
+
   /**
    * Activate the MQTT relay fallback transport.
-   * Messages are sent/received through MQTT in addition to WebRTC.
+   * Messages are sent/received through MQTT in addition to WebRTC. Relay
+   * payloads go through the same encryption wrapper — the broker never sees
+   * plaintext Yjs updates.
    */
   activateRelay(relay: RelayTransport) {
     if (this.relay) return; // Already active
@@ -91,13 +188,17 @@ export class TrysteroProvider {
     console.log('[CollabSpace:relay] Relay transport activated in TrysteroProvider');
 
     // Handle incoming sync messages from relay
-    relay.onSync((data, senderId) => this.handleIncomingSync(data, senderId));
+    relay.onSync((data, senderId) => {
+      this.decryptAndRoute(data, (plain) => this.handleIncomingSync(plain, senderId));
+    });
 
     // Handle incoming awareness messages from relay
     relay.onAwareness((data, _senderId) => {
-      try {
-        applyAwarenessUpdate(this.awareness, data, this);
-      } catch { /* ignore */ }
+      this.decryptAndRoute(data, (plain) => {
+        try {
+          applyAwarenessUpdate(this.awareness, plain, this);
+        } catch { /* ignore */ }
+      });
     });
 
     // When relay activates, send our full state so the other peer syncs up
@@ -116,7 +217,10 @@ export class TrysteroProvider {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, MSG_SYNC);
     syncProtocol.writeSyncStep1(encoder, this.doc);
-    this.relay.sendSync(encoding.toUint8Array(encoder));
+    const plain = encoding.toUint8Array(encoder);
+    encryptPayload(this.cryptoKey, plain)
+      .then((ct) => { this.relay?.sendSync(ct); })
+      .catch(() => { /* drop */ });
   }
 
   /** Send full awareness state via relay */
@@ -125,7 +229,9 @@ export class TrysteroProvider {
     const states = Array.from(this.awareness.getStates().keys());
     if (states.length === 0) return;
     const update = encodeAwarenessUpdate(this.awareness, states);
-    this.relay.sendAwareness(update);
+    encryptPayload(this.cryptoKey, update)
+      .then((ct) => { this.relay?.sendAwareness(ct); })
+      .catch(() => { /* drop */ });
   }
 
   /** Handle an incoming sync message (from either WebRTC or relay). */
@@ -148,9 +254,15 @@ export class TrysteroProvider {
 
         if (encoding.length(encoder) > 1) {
           const reply = encoding.toUint8Array(encoder);
-          // Reply via both transports
-          this.trystero.sendSync(reply, [peerId]);
-          this.relay?.sendSync(reply);
+          // Reply via both transports. Targeted over WebRTC (peerId),
+          // broadcast over relay (no targeting available).
+          this.sendEncryptedSync(reply, [peerId]);
+          // Also broadcast to relay so late joiners in relay mode catch up.
+          if (this.relay) {
+            encryptPayload(this.cryptoKey, reply)
+              .then((ct) => this.relay?.sendSync(ct))
+              .catch(() => { /* drop */ });
+          }
         }
       }
     } catch {
@@ -162,18 +274,26 @@ export class TrysteroProvider {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, MSG_SYNC);
     syncProtocol.writeSyncStep1(encoder, this.doc);
-    const encoded = encoding.toUint8Array(encoder);
-    this.trystero.sendSync(encoded, [peerId]);
-    // Also send via relay (broadcast — relay doesn't support targeting)
-    this.relay?.sendSync(encoded);
+    const plain = encoding.toUint8Array(encoder);
+    // Targeted over WebRTC, broadcast over relay
+    this.sendEncryptedSync(plain, [peerId]);
+    if (this.relay) {
+      encryptPayload(this.cryptoKey, plain)
+        .then((ct) => this.relay?.sendSync(ct))
+        .catch(() => { /* drop */ });
+    }
   }
 
   private sendAwarenessTo(peerId: string) {
     const states = Array.from(this.awareness.getStates().keys());
     if (states.length === 0) return;
     const update = encodeAwarenessUpdate(this.awareness, states);
-    this.trystero.sendAwareness(update, [peerId]);
-    this.relay?.sendAwareness(update);
+    this.sendEncryptedAwareness(update, [peerId]);
+    if (this.relay) {
+      encryptPayload(this.cryptoKey, update)
+        .then((ct) => this.relay?.sendAwareness(ct))
+        .catch(() => { /* drop */ });
+    }
   }
 
   destroy() {
