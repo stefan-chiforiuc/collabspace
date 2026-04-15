@@ -52,6 +52,15 @@ export interface TrysteroRoom {
   getSync: (cb: (data: Uint8Array, peerId: string) => void) => void;
   sendAwareness: (data: Uint8Array, targetPeers?: string[]) => void;
   getAwareness: (cb: (data: Uint8Array, peerId: string) => void) => void;
+  /**
+   * Encrypted authentication canary channel. Each peer broadcasts a constant
+   * plaintext ("COLLABSPACE_V2_CANARY_OK") encrypted under the room key on
+   * peer join. Receivers that can decrypt it have the correct password; the
+   * rest know immediately they have the wrong key and can surface a clear
+   * "wrong password" error instead of silently hanging.
+   */
+  sendCanary: (data: Uint8Array, targetPeers?: string[]) => void;
+  getCanary: (cb: (data: Uint8Array, peerId: string) => void) => void;
   onPeerJoin: (cb: (peerId: string) => void) => void;
   onPeerLeave: (cb: (peerId: string) => void) => void;
   getPeers: () => string[];
@@ -143,18 +152,23 @@ export function createTrysteroRoom(
 
   const syncActions: ActionPair[] = [];
   const awarenessActions: ActionPair[] = [];
+  const canaryActions: ActionPair[] = [];
 
   if (mqttRoom) {
     const [s, g] = mqttRoom.makeAction<Uint8Array>('yjs-sync');
     syncActions.push([s, g]);
     const [sa, ga] = mqttRoom.makeAction<Uint8Array>('yjs-awareness');
     awarenessActions.push([sa, ga]);
+    const [sc, gc] = mqttRoom.makeAction<Uint8Array>('cs-canary');
+    canaryActions.push([sc, gc]);
   }
   if (torrentRoom) {
     const [s, g] = torrentRoom.makeAction<Uint8Array>('yjs-sync');
     syncActions.push([s, g]);
     const [sa, ga] = torrentRoom.makeAction<Uint8Array>('yjs-awareness');
     awarenessActions.push([sa, ga]);
+    const [sc, gc] = torrentRoom.makeAction<Uint8Array>('cs-canary');
+    canaryActions.push([sc, gc]);
   }
 
   const peers = new Set<string>();
@@ -296,6 +310,12 @@ export function createTrysteroRoom(
     },
     getAwareness: (cb) => {
       awarenessActions.forEach(([, get]) => get(cb));
+    },
+    sendCanary: (data, targets) => {
+      canaryActions.forEach(([send]) => send(data, targets));
+    },
+    getCanary: (cb) => {
+      canaryActions.forEach(([, get]) => get(cb));
     },
     onPeerJoin: (cb) => joinCallbacks.push(cb),
     onPeerLeave: (cb) => leaveCallbacks.push(cb),

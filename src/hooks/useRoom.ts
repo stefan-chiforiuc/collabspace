@@ -2,10 +2,10 @@ import { createSignal, onCleanup } from 'solid-js';
 import { Awareness } from 'y-protocols/awareness';
 import { createTrysteroRoom, type TrysteroRoom, type ConnectionStatus } from '../lib/trystero';
 import { createYDoc } from '../lib/yjs-doc';
-import { TrysteroProvider } from '../lib/yjs-sync';
+import { TrysteroProvider, type AuthState } from '../lib/yjs-sync';
 import { setLocalAwareness, getParticipantList, assignColor } from '../lib/participants';
 import { sendChatMessage, sendSystemMessage, getChatMessages } from '../lib/chat';
-import { setRoomPassword } from '../lib/room-password';
+import { deriveRoomKey } from '../lib/room-crypto';
 import { getDisplayName } from '../lib/storage';
 import { MAX_PARTICIPANTS } from '../lib/constants';
 import { getConnectionSettings, saveConnectionSettings, type ConnectionSettings } from '../lib/connection-settings';
@@ -40,6 +40,11 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   const [connectionState, setConnectionState] = createSignal<RoomConnectionState>('connecting');
   const [connectionStatus, setConnectionStatus] = createSignal<ConnectionStatus>(EMPTY_STATUS);
   const [settings, setSettings] = createSignal<ConnectionSettings>(getConnectionSettings());
+  const [authState, setAuthState] = createSignal<AuthState>('pending');
+  // Mutable password — starts from the caller-provided value and can be
+  // replaced at runtime via setPassword() when the user answers the
+  // password gate after an auth-failure.
+  let currentPassword: string | undefined = password;
 
   // Yjs doc persists across reconnects
   const doc = createYDoc({
@@ -66,6 +71,10 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   let trystero: TrysteroRoom | null = null;
   let provider: TrysteroProvider | null = null;
   let relay: RelayTransport | null = null;
+  // Room-level symmetric key (derived from roomCode + password). Used by
+  // TrysteroProvider to encrypt all sync and awareness payloads so neither
+  // the MQTT broker nor any passive observer can read them.
+  let roomKey: CryptoKey | null = null;
   let statusInterval: ReturnType<typeof setInterval> | null = null;
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   let autoReconnectInterval: ReturnType<typeof setInterval> | null = null;
@@ -85,9 +94,15 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
 
   // Wire up a trystero room + provider to the existing doc
   function wireTransport(t: TrysteroRoom) {
+    if (!roomKey) {
+      throw new Error('wireTransport called before roomKey was derived');
+    }
     trystero = t;
     setTrysteroRef(t);
-    provider = new TrysteroProvider(doc, t);
+    provider = new TrysteroProvider(doc, t, roomKey);
+    // Surface the provider's auth state so the UI can react to wrong passwords.
+    setAuthState(provider.authState);
+    provider.onAuthStateChange((s) => setAuthState(s));
 
     // Sync the provider's awareness with our standalone awareness state
     setLocalAwareness(provider.awareness, name, color);
@@ -230,6 +245,13 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     setConnectionState('connecting');
     setIsConnected(false);
     try {
+      // Derive the room key. Same (roomCode, password) pair always yields
+      // the same key on both peers, so no key exchange is needed. This is
+      // awaited every time connect() runs so setPassword-triggered
+      // reconnects pick up the new password.
+      if (!roomKey) {
+        roomKey = await deriveRoomKey(roomCode, currentPassword);
+      }
       const settingsTurn = await buildTurnServers(s);
       // Also try Cloudflare TURN if configured
       const cfCreds = await generateCloudflareCredentials();
@@ -260,12 +282,23 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     await connect(s, extraTurn);
   }
 
-  // Set room password if creator
-  if (password) {
-    setRoomPassword(doc, password);
+  /**
+   * Update the password and reconnect. The joiner calls this from the
+   * password gate after the initial attempt's auth canary failed. Forces
+   * key re-derivation on the next connect().
+   */
+  async function setPassword(newPassword: string) {
+    currentPassword = newPassword;
+    roomKey = null;
+    setAuthState('pending');
+    teardownTransport();
+    await connect(settings());
   }
 
-  // Start initial connection (with shared TURN from invite URL if available)
+  // Start initial connection (with shared TURN from invite URL if available).
+  // The password is folded into the room key via deriveRoomKey — wrong
+  // password means every incoming payload fails AES-GCM authentication and
+  // is silently dropped. No plaintext password material ever touches the doc.
   connect(settings(), sharedTurn);
 
   // Watch for shared TURN credentials from other peers.
@@ -310,6 +343,8 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     },
     trysteroRoom: trysteroRef,
     turnServers: () => localTurnServers,
+    authState,
+    setPassword,
     reconnect,
     retryFailedConnections: () => reconnect(),
     leave,
