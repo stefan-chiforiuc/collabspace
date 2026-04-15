@@ -2,6 +2,43 @@
 
 ---
 
+## Architecture Review + P0 Security Fixes (2026-04-14)
+
+### What's New
+- **Architectural review document** landed at `plans/architecture-review-and-improvements.md` — 10 challenges, prioritized P0/P1/P2 proposals, 4-sprint roadmap.
+- **P0-1: End-to-end encryption of all Yjs payloads.** Every sync and awareness message is now wrapped in AES-GCM at the `TrysteroProvider` boundary before it touches either the WebRTC data channel or the MQTT relay fallback. The MQTT broker no longer sees plaintext chat, notepad, polls, poker votes, or awareness — closing the critical leak that `src/lib/mqtt-relay.ts` introduced.
+- **P0-2: Dead dependencies relocated.** `@xenova/transformers` and `vectra` moved from `dependencies` to `devDependencies` — they are only used by `.claude/memory-db/` tooling and were never imported from `src/`. Keeps them working for memory-db tooling while removing them from the runtime dependency surface.
+- **P0-3: Password is now a cryptographic gate.** The old SHA-256 `passwordHash` stored in the Yjs doc is gone. The password is folded into the AES key via PBKDF2-SHA256 (100k iterations, roomCode as salt) so a wrong password means every single incoming payload fails GCM authentication and is dropped. A dedicated `cs-canary` Trystero action lets a joiner detect a wrong password explicitly — the `PasswordGate` is now driven by the provider's auth-state signal and offers retry without a page reload.
+- **P0-4: Corporate-network fallback UX.** When every configured MQTT broker and BitTorrent tracker is in `closed` state, the failure screen now explains that WebSockets are being blocked, lists the failed relays, and suggests concrete mitigations (mobile hotspot, VPN tweak, open Connection Settings, ask for shared TURN creds).
+
+### Critical Security Finding (Fixed)
+The MQTT relay fallback (`src/lib/mqtt-relay.ts:122-129` → `src/lib/yjs-sync.ts:46-55`) was publishing raw Yjs updates — chat, notes, polls, poker votes, awareness, and the stored password hash — to a public broker the moment WebRTC failed. Any peer who knew the room code could subscribe and reconstruct the whole document. Now the wire is fully encrypted under AES-GCM(PBKDF2(roomCode, password)).
+
+### New Files
+- `plans/architecture-review-and-improvements.md` — the review + roadmap.
+- `src/lib/room-crypto.ts` — PBKDF2 key derivation, AES-GCM wrap/unwrap, canary encode/verify.
+- `src/lib/room-crypto.test.ts` — 9 unit tests covering key derivation, encryption, tamper detection, and canary verification.
+
+### Files Removed
+- `src/lib/room-password.ts` + `src/lib/room-password.test.ts` — the old SHA-256 password hash is obsolete; the password is now a key-derivation input.
+
+### Files Changed
+- `src/lib/yjs-sync.ts` — `TrysteroProvider` constructor now takes a `CryptoKey`; all sends and receives are wrapped in encrypt/decrypt; auth state tracked via encrypted canaries.
+- `src/lib/trystero.ts` — added `sendCanary` / `getCanary` action wired across MQTT + torrent rooms.
+- `src/hooks/useRoom.ts` — derives `roomKey` via `deriveRoomKey`, exposes `authState` signal and `setPassword()` method for password-gate retries.
+- `src/components/RoomView.tsx` — password gate now gated on `authState === 'failed'` with a retry flow; failure screen shows a corporate-network panel when all relays are closed.
+- `package.json` — `@xenova/transformers` and `vectra` moved to `devDependencies`.
+
+### Build Stats
+- Main JS: 572KB (176KB gzipped)
+- TipTap chunk: 465KB (148KB gzipped)
+- CSS: 39KB (7KB gzipped)
+- Unit tests: 37 passed, 0 failed (was 32)
+- Build: OK
+- Type check: OK
+
+---
+
 ## Connection Settings, TURN Support, and Improved Join Flow (2026-04-09)
 
 ### What's New
