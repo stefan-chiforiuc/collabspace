@@ -1,16 +1,12 @@
 import qrcode from 'qrcode-generator';
 import type { TurnServerConfig } from './turn-config';
+import { encodeTurnServers } from './turn-encoding';
 
 export function getShareUrl(roomCode: string, turnServers?: TurnServerConfig[]): string {
   let hash = `#/room/${roomCode}`;
   if (turnServers && turnServers.length > 0) {
-    // Serialize TURN credentials into the URL (base64 in hash fragment — never sent to server)
-    const serialized = turnServers.map(s => ({
-      urls: Array.isArray(s.urls) ? s.urls : [s.urls],
-      username: s.username,
-      credential: s.credential,
-    }));
-    const turnParam = btoa(JSON.stringify(serialized));
+    // Compact-encode TURN credentials into the URL (base64 in hash fragment — never sent to server)
+    const turnParam = encodeTurnServers(turnServers);
     hash += `?turn=${turnParam}`;
   }
   return `${window.location.origin}${window.location.pathname}${hash}`;
