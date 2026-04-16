@@ -172,11 +172,19 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
       }
     }, RELAY_FALLBACK_DELAY_MS);
 
-    // Auto-reconnect polling — detect failed relays and rebuild transport
+    // Auto-reconnect polling — detect failed relays and rebuild transport.
+    // Only reconnect if ALL relays of a strategy are down AND we have no
+    // active WebRTC peers. Signaling relay closures are irrelevant when
+    // direct P2P is working.
     if (autoReconnectInterval) clearInterval(autoReconnectInterval);
     if (settings().autoReconnect) {
       autoReconnectInterval = setInterval(() => {
-        if (trystero?.hasFailedRelays() && connectionState() === 'connected') {
+        if (
+          trystero?.hasFailedRelays() &&
+          !trystero.hasPeers() &&
+          connectionState() === 'connected'
+        ) {
+          console.log('[CollabSpace:reconnect] All relays failed and no peers — reconnecting');
           reconnect();
         }
       }, 15_000);

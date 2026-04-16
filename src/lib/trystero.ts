@@ -66,6 +66,7 @@ export interface TrysteroRoom {
   getPeers: () => string[];
   getConnectionStatus: () => ConnectionStatus;
   hasFailedRelays: () => boolean;
+  hasPeers: () => boolean;
   addStream: (stream: MediaStream, targetPeers?: string[]) => Promise<void>[];
   removeStream: (stream: MediaStream, targetPeers?: string[]) => void;
   onPeerStream: (cb: (stream: MediaStream, peerId: string, metadata?: unknown) => void) => void;
@@ -322,9 +323,15 @@ export function createTrysteroRoom(
     getPeers: () => [...peers],
     getConnectionStatus,
     hasFailedRelays: () => {
+      // Only consider relays "failed" if ALL relays of an enabled strategy
+      // are closed. Individual relay closures are normal for free public
+      // brokers and should not trigger a reconnect.
       const status = getConnectionStatus();
-      return status.relays.some(r => r.state === 'closed');
+      const mqttFailed = status.mqtt.enabled && status.mqtt.total > 0 && status.mqtt.connected === 0;
+      const torrentFailed = status.torrent.enabled && status.torrent.total > 0 && status.torrent.connected === 0;
+      return mqttFailed || torrentFailed;
     },
+    hasPeers: () => peers.size > 0,
     addStream: (stream, targets) => primaryRoom.addStream(stream, targets),
     removeStream: (stream, targets) => primaryRoom.removeStream(stream, targets),
     onPeerStream: (cb) => primaryRoom.onPeerStream(cb),
