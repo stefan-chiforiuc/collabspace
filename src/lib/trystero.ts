@@ -174,6 +174,7 @@ export function createTrysteroRoom(
 
   const peers = new Set<string>();
   const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const lastSeenMap = new Map<string, number>();
   const joinCallbacks: ((peerId: string) => void)[] = [];
   const leaveCallbacks: ((peerId: string) => void)[] = [];
 
@@ -199,13 +200,29 @@ export function createTrysteroRoom(
   const handlePeerLeave = (source: string) => (peerId: string) => {
     diag('peer', `PEER LEAVE via ${source}: peerId=${peerId} (known=${peers.has(peerId)})`);
     if (!peers.has(peerId)) return;
-    const timer = setTimeout(() => {
-      peers.delete(peerId);
-      disconnectTimers.delete(peerId);
-      diag('peer', `Peer removed after grace period: ${peerId} (total peers: ${peers.size})`);
-      leaveCallbacks.forEach((cb) => cb(peerId));
-    }, DISCONNECT_GRACE_MS);
-    disconnectTimers.set(peerId, timer);
+
+    const scheduleRemoval = () => {
+      const timer = setTimeout(() => {
+        // Before removing, check if we've received data from this peer
+        // recently. If so, the peer is still alive on another channel —
+        // reschedule instead of removing.
+        const lastSeen = lastSeenMap.get(peerId) ?? 0;
+        const elapsed = Date.now() - lastSeen;
+        if (elapsed < DISCONNECT_GRACE_MS) {
+          diag('peer', `Peer ${peerId} still sending data (${elapsed}ms ago) — rescheduling removal`);
+          scheduleRemoval();
+          return;
+        }
+        peers.delete(peerId);
+        disconnectTimers.delete(peerId);
+        lastSeenMap.delete(peerId);
+        diag('peer', `Peer removed after grace period: ${peerId} (total peers: ${peers.size})`);
+        leaveCallbacks.forEach((cb) => cb(peerId));
+      }, DISCONNECT_GRACE_MS);
+      disconnectTimers.set(peerId, timer);
+    };
+
+    scheduleRemoval();
   };
 
   if (mqttRoom) {
@@ -304,19 +321,28 @@ export function createTrysteroRoom(
       syncActions.forEach(([send]) => send(data, targets));
     },
     getSync: (cb) => {
-      syncActions.forEach(([, get]) => get(cb));
+      syncActions.forEach(([, get]) => get((data, peerId) => {
+        lastSeenMap.set(peerId, Date.now());
+        cb(data, peerId);
+      }));
     },
     sendAwareness: (data, targets) => {
       awarenessActions.forEach(([send]) => send(data, targets));
     },
     getAwareness: (cb) => {
-      awarenessActions.forEach(([, get]) => get(cb));
+      awarenessActions.forEach(([, get]) => get((data, peerId) => {
+        lastSeenMap.set(peerId, Date.now());
+        cb(data, peerId);
+      }));
     },
     sendCanary: (data, targets) => {
       canaryActions.forEach(([send]) => send(data, targets));
     },
     getCanary: (cb) => {
-      canaryActions.forEach(([, get]) => get(cb));
+      canaryActions.forEach(([, get]) => get((data, peerId) => {
+        lastSeenMap.set(peerId, Date.now());
+        cb(data, peerId);
+      }));
     },
     onPeerJoin: (cb) => joinCallbacks.push(cb),
     onPeerLeave: (cb) => leaveCallbacks.push(cb),
@@ -339,6 +365,7 @@ export function createTrysteroRoom(
     leave: () => {
       disconnectTimers.forEach((t) => clearTimeout(t));
       disconnectTimers.clear();
+      lastSeenMap.clear();
       mqttRoom?.leave();
       torrentRoom?.leave();
     },

@@ -1,7 +1,7 @@
 export const APP_ID = 'collabspace-v2';
 
 export const MAX_PARTICIPANTS = 6;
-export const DISCONNECT_GRACE_MS = 10_000;
+export const DISCONNECT_GRACE_MS = 45_000;
 
 export const ADJECTIVES = [
   'calm', 'swift', 'bright', 'warm', 'cool', 'sharp', 'bold', 'kind',
