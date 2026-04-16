@@ -81,11 +81,21 @@ export function decodeTurnServers(encoded: string): TurnServerConfig[] {
         for (const id of payload.b) {
           const provider = DEFAULT_TURN_PROVIDERS.find(p => p.id === id);
           if (provider) {
-            servers.push({
-              urls: provider.urls,
-              username: provider.username,
-              credential: provider.credential,
-            });
+            // Only include providers that have static credentials.
+            // HMAC-based providers (e.g. openrelay-global) have no static
+            // username/credential — they generate time-limited creds at
+            // connect time via buildTurnServers(). Including them here with
+            // undefined credentials would cause RTCPeerConnection to reject
+            // the ICE config. The joiner's own buildTurnServers() already
+            // picks up all enabled built-in providers with fresh credentials.
+            if (provider.credentialType === 'static' && provider.username && provider.credential) {
+              servers.push({
+                urls: provider.urls,
+                username: provider.username,
+                credential: provider.credential,
+              });
+            }
+            // For HMAC/none providers: skip — buildTurnServers handles them
           }
         }
       }
