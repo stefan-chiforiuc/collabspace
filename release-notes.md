@@ -2,6 +2,31 @@
 
 ---
 
+## Mandatory Pre-Join Lobby + Shorter Invite Links (2026-04-16)
+
+**PR:** #13
+**Branch:** `feature/mandatory-lobby-shorter-links` → `develop`
+
+### What's New
+- **Pre-join lobby screen**: Invite-link joiners now see a lobby screen requiring display name and password before entering the room (previously skipped directly into the room as "Anonymous")
+- **Mandatory passwords**: Password fields are always visible and required on the Landing page for both room creation and joining (removed "Room options..." / "Room has a password?" optional toggles)
+- **Shorter invite links**: Built-in TURN providers encoded as compact IDs instead of full JSON, reducing invite URL length by ~85% (~120 chars vs ~800+ chars). Old invite links remain backward-compatible.
+- **Connection settings in lobby**: Joiners can optionally configure MQTT/BitTorrent/TURN settings before entering the room
+
+### Files Changed
+- `src/components/Lobby.tsx` — New pre-join lobby component
+- `src/lib/turn-encoding.ts` — New compact TURN encoding/decoding
+- `src/hooks/useHashRouter.ts` — Added `lobby` route to hash router
+- `src/App.tsx` — Wired lobby route
+- `src/components/Landing.tsx` — Made password mandatory
+- `src/lib/share.ts` — Uses compact TURN encoding
+
+### Build Stats
+- CI: All checks passing
+- No new dependencies
+
+---
+
 ## Architecture Review + P0 Security Fixes (2026-04-14)
 
 ### What's New
