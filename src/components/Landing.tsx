@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal } from 'solid-js';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import Input from './ui/Input';
@@ -10,41 +10,29 @@ export default function Landing() {
   const [joinCode, setJoinCode] = createSignal('');
   const [joinPassword, setJoinPassword] = createSignal('');
   const [password, setPassword] = createSignal('');
-  const [showAdvanced, setShowAdvanced] = createSignal(false);
-  const [showJoinOptions, setShowJoinOptions] = createSignal(false);
 
   const handleCreate = () => {
-    if (!name().trim()) return;
+    if (!canCreate()) return;
     setDisplayName(name().trim());
     const code = generateRoomCode();
-    const pw = password().trim();
-    if (pw) {
-      const encoded = btoa(pw);
-      window.location.hash = `/room/${code}?creator=1&pw=${encoded}`;
-    } else {
-      window.location.hash = `/room/${code}?creator=1`;
-    }
+    const encoded = btoa(password().trim());
+    window.location.hash = `/room/${code}?creator=1&pw=${encoded}`;
   };
 
   const handleJoin = () => {
     const code = joinCode().trim().toLowerCase();
-    if (!code || !name().trim()) return;
+    if (!canJoin()) return;
     setDisplayName(name().trim());
-    const pw = joinPassword().trim();
-    if (pw) {
-      const encoded = btoa(pw);
-      window.location.hash = `/room/${code}?pw=${encoded}`;
-    } else {
-      window.location.hash = `/room/${code}`;
-    }
+    const encoded = btoa(joinPassword().trim());
+    window.location.hash = `/room/${code}?pw=${encoded}`;
   };
 
   const handleJoinKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') handleJoin();
   };
 
-  const canCreate = () => !!name().trim();
-  const canJoin = () => !!name().trim() && !!joinCode().trim();
+  const canCreate = () => !!name().trim() && !!password().trim();
+  const canJoin = () => !!name().trim() && !!joinCode().trim() && !!joinPassword().trim();
 
   return (
     <div class="min-h-screen flex items-center justify-center p-4">
@@ -67,27 +55,17 @@ export default function Landing() {
           autofocus
         />
 
-        <div class="space-y-2">
-          <Button onClick={handleCreate} size="lg" class="w-full" disabled={!canCreate()}>
-            Create Room
-          </Button>
-          <button
-            onClick={() => setShowAdvanced(!showAdvanced())}
-            class="text-xs text-surface-500 hover:text-surface-300 cursor-pointer w-full text-center"
-          >
-            {showAdvanced() ? 'Hide options' : 'Room options...'}
-          </button>
-        </div>
+        <Input
+          label="Room password"
+          placeholder="Choose a password"
+          value={password()}
+          onInput={(e) => setPassword(e.currentTarget.value)}
+          maxLength={64}
+        />
 
-        <Show when={showAdvanced()}>
-          <Input
-            label="Room password (optional)"
-            placeholder="Leave empty for open room"
-            value={password()}
-            onInput={(e) => setPassword(e.currentTarget.value)}
-            maxLength={64}
-          />
-        </Show>
+        <Button onClick={handleCreate} size="lg" class="w-full" disabled={!canCreate()}>
+          Create Room
+        </Button>
 
         <div class="relative">
           <div class="absolute inset-0 flex items-center">
@@ -112,25 +90,14 @@ export default function Landing() {
             </Button>
           </div>
 
-          <Show when={joinCode().trim()}>
-            <button
-              onClick={() => setShowJoinOptions(!showJoinOptions())}
-              class="text-xs text-surface-500 hover:text-surface-300 cursor-pointer w-full text-center"
-            >
-              {showJoinOptions() ? 'Hide' : 'Room has a password?'}
-            </button>
-          </Show>
-
-          <Show when={showJoinOptions()}>
-            <Input
-              label="Room password"
-              placeholder="Enter room password"
-              value={joinPassword()}
-              onInput={(e) => setJoinPassword(e.currentTarget.value)}
-              onKeyDown={handleJoinKeyDown}
-              maxLength={64}
-            />
-          </Show>
+          <Input
+            label="Room password"
+            placeholder="Enter room password"
+            value={joinPassword()}
+            onInput={(e) => setJoinPassword(e.currentTarget.value)}
+            onKeyDown={handleJoinKeyDown}
+            maxLength={64}
+          />
         </div>
       </Card>
     </div>
