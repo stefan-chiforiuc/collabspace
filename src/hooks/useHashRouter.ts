@@ -1,9 +1,11 @@
 import { createSignal, onCleanup } from 'solid-js';
 import type { TurnServerConfig } from '../lib/turn-config';
+import { decodeTurnServers } from '../lib/turn-encoding';
 
 export type Route =
   | { page: 'landing' }
-  | { page: 'room'; roomCode: string; password?: string; isCreator: boolean; sharedTurn?: TurnServerConfig[] };
+  | { page: 'lobby'; roomCode: string; sharedTurn?: TurnServerConfig[] }
+  | { page: 'room'; roomCode: string; password: string; isCreator: boolean; sharedTurn?: TurnServerConfig[] };
 
 function parseHash(): Route {
   const hash = window.location.hash;
@@ -15,18 +17,26 @@ function parseHash(): Route {
     const password = pw ? atob(pw) : undefined;
     const isCreator = params.get('creator') === '1';
 
-    // Parse shared TURN credentials from invite URL
+    // Parse shared TURN credentials from invite URL (compact or legacy format)
     let sharedTurn: TurnServerConfig[] | undefined;
     const turnParam = params.get('turn');
     if (turnParam) {
-      try {
-        sharedTurn = JSON.parse(atob(turnParam));
-      } catch {
-        console.warn('[CollabSpace] Failed to parse TURN credentials from URL');
-      }
+      const decoded = decodeTurnServers(turnParam);
+      if (decoded.length > 0) sharedTurn = decoded;
     }
 
-    return { page: 'room', roomCode, password, isCreator, sharedTurn };
+    // Creator with password → straight to room
+    if (isCreator && password) {
+      return { page: 'room', roomCode, password, isCreator: true, sharedTurn };
+    }
+
+    // Joiner with password (submitted from lobby or landing) → room
+    if (!isCreator && password) {
+      return { page: 'room', roomCode, password, isCreator: false, sharedTurn };
+    }
+
+    // No password → lobby to collect name + password
+    return { page: 'lobby', roomCode, sharedTurn };
   }
   return { page: 'landing' };
 }
