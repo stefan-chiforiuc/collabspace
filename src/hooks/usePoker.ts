@@ -21,10 +21,37 @@ export function usePoker(doc: Y.Doc, localPeerId: string, localName: string) {
     setState(getPokerState(doc));
   };
 
+  // Observe the top-level poker map (topic, revealed, round, etc.)
   pokerMap.observe(update);
+
+  // Also observe the nested votesMap so individual vote changes trigger updates.
+  // The votesMap may not exist yet, so we watch for it to appear and attach.
+  let votesMapCleanup: (() => void) | null = null;
+
+  function attachVotesObserver() {
+    const votesMap = pokerMap.get('votesMap') as Y.Map<string> | undefined;
+    if (votesMap && !votesMapCleanup) {
+      votesMap.observe(update);
+      votesMapCleanup = () => votesMap.unobserve(update);
+    }
+  }
+
+  // Attach now if it already exists
+  attachVotesObserver();
+
+  // Re-check whenever the poker map changes (votesMap might appear)
+  const deepObserver = () => {
+    attachVotesObserver();
+  };
+  pokerMap.observeDeep(deepObserver);
+
   update();
 
-  onCleanup(() => pokerMap.unobserve(update));
+  onCleanup(() => {
+    pokerMap.unobserve(update);
+    pokerMap.unobserveDeep(deepObserver);
+    votesMapCleanup?.();
+  });
 
   return {
     state,

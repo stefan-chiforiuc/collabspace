@@ -2,6 +2,16 @@ import * as Y from 'yjs';
 import { getPoker } from './yjs-doc';
 import type { PokerRound, CardSet } from './types';
 
+function getVotesMap(doc: Y.Doc): Y.Map<string> {
+  const poker = getPoker(doc);
+  let votesMap = poker.get('votesMap') as Y.Map<string> | undefined;
+  if (!votesMap) {
+    votesMap = new Y.Map<string>();
+    poker.set('votesMap', votesMap);
+  }
+  return votesMap;
+}
+
 export function startPokerRound(
   doc: Y.Doc,
   topic: string,
@@ -12,27 +22,22 @@ export function startPokerRound(
   const poker = getPoker(doc);
   const currentRound = poker.get('round') as number | undefined;
 
-  const round: PokerRound = {
-    topic,
-    cardSet,
-    votes: {},
-    revealed: false,
-    round: (currentRound ?? 0) + 1,
-    startedBy,
-    startedByName,
-    startedAt: Date.now(),
-  };
-
-  // Set all fields on the Y.Map
-  poker.set('topic', round.topic);
-  poker.set('cardSet', round.cardSet);
-  poker.set('votes', round.votes);
-  poker.set('revealed', round.revealed);
-  poker.set('round', round.round);
-  poker.set('startedBy', round.startedBy);
-  poker.set('startedByName', round.startedByName);
-  poker.set('startedAt', round.startedAt);
+  poker.set('topic', topic);
+  poker.set('cardSet', cardSet);
+  poker.set('revealed', false);
+  poker.set('round', (currentRound ?? 0) + 1);
+  poker.set('startedBy', startedBy);
+  poker.set('startedByName', startedByName);
+  poker.set('startedAt', Date.now());
   poker.set('active', true);
+
+  // Clear all votes using the nested Y.Map (each key is a peerId)
+  const votesMap = getVotesMap(doc);
+  for (const key of [...votesMap.keys()]) {
+    votesMap.delete(key);
+  }
+  // Also clear legacy plain-object votes
+  poker.delete('votes');
 }
 
 export function submitVote(
@@ -43,8 +48,10 @@ export function submitVote(
   const poker = getPoker(doc);
   if (poker.get('revealed') || !poker.get('active')) return;
 
-  const votes = (poker.get('votes') as Record<string, string>) || {};
-  poker.set('votes', { ...votes, [peerId]: card });
+  // Write directly to the nested Y.Map — each peer's vote is an independent
+  // CRDT entry, so concurrent votes don't overwrite each other.
+  const votesMap = getVotesMap(doc);
+  votesMap.set(peerId, card);
 }
 
 export function revealVotes(doc: Y.Doc): void {
@@ -58,17 +65,37 @@ export function resetPoker(doc: Y.Doc): void {
   const poker = getPoker(doc);
   poker.set('active', false);
   poker.set('revealed', false);
-  poker.set('votes', {});
   poker.set('topic', '');
+
+  const votesMap = getVotesMap(doc);
+  for (const key of [...votesMap.keys()]) {
+    votesMap.delete(key);
+  }
+  poker.delete('votes');
 }
 
 export function getPokerState(doc: Y.Doc): PokerRound & { active: boolean } {
   const poker = getPoker(doc);
 
+  // Read votes from the nested Y.Map
+  const votesMap = getVotesMap(doc);
+  const votes: Record<string, string> = {};
+  votesMap.forEach((value, key) => {
+    votes[key] = value;
+  });
+
+  // Fallback: merge any legacy plain-object votes (old sessions)
+  const legacyVotes = poker.get('votes') as Record<string, string> | undefined;
+  if (legacyVotes && typeof legacyVotes === 'object') {
+    for (const [k, v] of Object.entries(legacyVotes)) {
+      if (!(k in votes)) votes[k] = v;
+    }
+  }
+
   return {
     topic: (poker.get('topic') as string) || '',
     cardSet: (poker.get('cardSet') as CardSet) || 'fibonacci',
-    votes: (poker.get('votes') as Record<string, string>) || {},
+    votes,
     revealed: (poker.get('revealed') as boolean) || false,
     round: (poker.get('round') as number) || 0,
     startedBy: (poker.get('startedBy') as string) || '',
