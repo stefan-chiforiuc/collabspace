@@ -1,5 +1,5 @@
 import { createSignal, onCleanup } from 'solid-js';
-import { Awareness } from 'y-protocols/awareness';
+import { Awareness, removeAwarenessStates } from 'y-protocols/awareness';
 import { createTrysteroRoom, type TrysteroRoom, type ConnectionStatus } from '../lib/trystero';
 import { createYDoc } from '../lib/yjs-doc';
 import { TrysteroProvider, type AuthState } from '../lib/yjs-sync';
@@ -64,6 +64,11 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
   const awareness = new Awareness(doc);
   setLocalAwareness(awareness, name, color);
 
+  // Cache of last-known name per awareness clientID (as a string). Populated
+  // from awareness changes and read when posting "<name> left" chat messages
+  // after an awareness state is removed (graceful leave or heartbeat timeout).
+  const peerNameCache = new Map<string, string>();
+
   // Reactive signal for the trystero room (used by useMedia to react to reconnects)
   const [trysteroRef, setTrysteroRef] = createSignal<TrysteroRoom | null>(null);
 
@@ -110,10 +115,35 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
 
     // Track participants from provider's awareness (it's the one connected to the network)
     const updateParticipants = () => {
-      setParticipants(getParticipantList(provider!.awareness));
+      const list = getParticipantList(provider!.awareness);
+      // Keep last-known name per clientID so we can still identify a peer in
+      // chat after their awareness state is removed (graceful leave or timeout).
+      list.forEach((p) => peerNameCache.set(p.peerId, p.name));
+      setParticipants(list);
     };
     provider.awareness.on('change', updateParticipants);
     updateParticipants();
+
+    // When any awareness state is removed (graceful leave broadcasts a removal,
+    // or the y-protocols heartbeat times out on hard disconnect), post a named
+    // "X left" message to chat. Deterministic leader election — only the peer
+    // with the smallest remaining clientID posts — prevents every remaining
+    // peer from duplicating the message.
+    const onAwarenessRemove = ({ removed }: { added: number[]; updated: number[]; removed: number[] }) => {
+      if (removed.length === 0) return;
+      const myId = doc.clientID;
+      const remainingIds = Array.from(provider!.awareness.getStates().keys());
+      if (remainingIds.length === 0) return;
+      const leaderId = Math.min(...remainingIds);
+      if (leaderId !== myId) return;
+      for (const removedId of removed) {
+        if (removedId === myId) continue;
+        const peerName = peerNameCache.get(String(removedId)) ?? 'Someone';
+        sendSystemMessage(doc, `${peerName} left`);
+        peerNameCache.delete(String(removedId));
+      }
+    };
+    provider.awareness.on('update', onAwarenessRemove);
 
     // Peer events
     t.onPeerJoin((_peerId) => {
@@ -138,7 +168,9 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
       if (t.getPeers().length === 0) {
         setIsConnected(false);
       }
-      sendSystemMessage(doc, `A participant left`);
+      // Chat-side notification is driven by awareness removal (graceful leave)
+      // or awareness heartbeat timeout (hard disconnect). That path names the
+      // peer and de-duplicates via leader election, so nothing is posted here.
     });
 
     // Poll connection status
@@ -327,10 +359,27 @@ export function useRoom(roomCode: string, password?: string, isCreator: boolean 
     connect(s, creds.servers);
   });
 
+  let leaveScheduled = false;
   const leave = () => {
+    if (leaveScheduled) return;
+    leaveScheduled = true;
     unwatchTurn?.();
-    teardownTransport();
-    doc.destroy();
+    // Broadcast explicit awareness removal so remote peers drop us from their
+    // participant lists immediately (no 45s DISCONNECT_GRACE_MS wait) and
+    // their leader posts the named "X left" chat message.
+    if (provider && provider.awareness.getStates().has(doc.clientID)) {
+      try {
+        removeAwarenessStates(provider.awareness, [doc.clientID], 'local-leave');
+      } catch (e) {
+        console.warn('[useRoom] Failed to broadcast awareness removal on leave:', e);
+      }
+    }
+    // Let the provider flush the awareness update over Trystero before we kill
+    // transport. Short delay — best-effort, page navigation may cancel it.
+    setTimeout(() => {
+      teardownTransport();
+      doc.destroy();
+    }, 150);
   };
 
   onCleanup(leave);

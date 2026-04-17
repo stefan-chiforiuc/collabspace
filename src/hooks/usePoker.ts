@@ -12,7 +12,7 @@ import {
 import { dispatchNotification } from '../lib/notifications';
 import type { PokerRound, CardSet } from '../lib/types';
 
-export function usePoker(doc: Y.Doc, localPeerId: string, localName: string) {
+export function usePoker(doc: Y.Doc, localPeerId: () => string, localName: string) {
   const [state, setState] = createSignal<PokerRound & { active: boolean }>(getPokerState(doc));
 
   const pokerMap = getPoker(doc);
@@ -56,11 +56,11 @@ export function usePoker(doc: Y.Doc, localPeerId: string, localName: string) {
   return {
     state,
     startRound: (topic: string, cardSet: CardSet) => {
-      startPokerRound(doc, topic, cardSet, localPeerId, localName);
-      dispatchNotification(doc, 'poker_started', localPeerId, localName, `${localName} started Planning Poker`, 'poker');
+      startPokerRound(doc, topic, cardSet, localPeerId(), localName);
+      dispatchNotification(doc, 'poker_started', localPeerId(), localName, `${localName} started Planning Poker`, 'poker');
     },
     vote: (card: string) => {
-      submitVote(doc, localPeerId, card);
+      submitVote(doc, localPeerId(), card);
     },
     reveal: () => {
       revealVotes(doc);
@@ -69,7 +69,7 @@ export function usePoker(doc: Y.Doc, localPeerId: string, localName: string) {
       resetPoker(doc);
     },
     getResults: () => calculatePokerResults(state().votes),
-    hasVoted: () => localPeerId in state().votes,
-    myVote: () => state().votes[localPeerId] || null,
+    hasVoted: () => localPeerId() in state().votes,
+    myVote: () => state().votes[localPeerId()] || null,
   };
 }
