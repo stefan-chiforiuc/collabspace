@@ -70,8 +70,8 @@ export default function RoomView(props: RoomViewProps) {
       setPasswordError('Incorrect password. Please try again.');
     }
   });
-  const polls = usePolls(room.doc, room.localPeerId(), room.localName);
-  const poker = usePoker(room.doc, room.localPeerId(), room.localName);
+  const polls = usePolls(room.doc, room.localPeerId, room.localName);
+  const poker = usePoker(room.doc, room.localPeerId, room.localName);
   const timer = useTimer(room.doc, room.localPeerId(), room.localName);
 
   const reactions = useReactions(room.doc, room.awareness, room.localPeerId(), room.localName);
