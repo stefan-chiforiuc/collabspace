@@ -2,6 +2,31 @@
 
 ---
 
+## Voting Fix + Graceful Leave (2026-04-17)
+
+**Branch:** `claude/fix-voting-buttons-bug-vLKsj`
+
+### What's New
+- **Fixed "voting buttons disabled on second browser" bug in Polls & Planning Poker.** The `usePolls` / `usePoker` hooks were receiving `localPeerId` as a *called* signal (`room.localPeerId()`) at mount time, when the signal was still its initial empty string `''`. The hooks captured `''` in a closure forever, so every peer voted under the same empty key — in Polls the UI hid the buttons via `<Show when={!hasVoted()}>`, in Poker every vote overwrote the single `''` entry. Both hooks now take `localPeerId: () => string` and resolve the ID per operation. `RoomView.tsx` passes the signal uncalled.
+- **Graceful Leave.** Clicking **Leave** now broadcasts an explicit `removeAwarenessStates(...)` update before transport teardown. Remote peers see the leaver disappear from the participant list **immediately** (instead of waiting up to 45s for `DISCONNECT_GRACE_MS`).
+- **Named "X left" chat message.** Chat used to display a generic `"A participant left"` sent by every remaining peer in the room (N duplicate messages). Now a single leader-elected peer posts `"<name> left"` using a `peerId → name` cache populated from awareness changes. Works for both graceful leaves and hard disconnects (after awareness heartbeat timeout).
+
+### Files Changed
+- `src/hooks/usePoker.ts` — signature takes `localPeerId: () => string`; all references resolve per call
+- `src/hooks/usePolls.ts` — same treatment
+- `src/components/RoomView.tsx` — pass `room.localPeerId` uncalled to both hooks
+- `src/hooks/useRoom.ts` — `peerNameCache`, awareness-removal leader election for chat messages, explicit awareness broadcast on `leave()`, removal of duplicate generic "A participant left"
+
+### Build Stats
+- Type check: clean
+- Tests: 37 passed (6 files)
+- Build: JS 575 KB (gzip 177 KB), CSS 38.8 KB (gzip 7.3 KB)
+
+### Known Follow-ups
+- The same non-reactive-capture pattern exists in `useTimer`, `useReactions`, `useNotifications`, `useMedia`, `useChat` call sites in `RoomView.tsx`. Not fixed here to keep the change scoped; worth a dedicated follow-up.
+
+---
+
 ## Network Connectivity Fixes — Awareness Keep-Alive + MQTT Redundancy (2026-04-17)
 
 **Branch:** `claude/debug-network-connectivity-EgCD6`
