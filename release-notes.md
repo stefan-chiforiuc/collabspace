@@ -2,6 +2,26 @@
 
 ---
 
+## Network Connectivity Fixes — Awareness Keep-Alive + MQTT Redundancy (2026-04-17)
+
+**Branch:** `claude/debug-network-connectivity-EgCD6`
+
+### What's New
+- **Fixed "peer appears alone but chat still works" bug.** `TrysteroProvider` now listens to `awareness.on('update', …)` instead of `awareness.on('change', …)`. The y-protocols keep-alive (re-emitted every ~15s on the internal timer) fires on `update` but not `change`, so the previous handler never broadcast heartbeats. Remote clients were being auto-expired by Yjs Awareness (`outdatedTime=30s`) even though Trystero, the MQTT relay, and the CRDT sync channel were all still alive. The new handler also skips updates whose origin is our own `applyAwarenessUpdate(…, this)` call to avoid echoing remote deltas back.
+- **MQTT/Torrent signaling redundancy = broker count.** `createTrysteroRoom` previously capped `relayRedundancy` at 4 (MQTT) and 3 (torrent). Two peers with differing broker lists could end up on disjoint subsets and fail to discover each other. Both strategies now connect to every configured server so signaling overlap is guaranteed.
+- **Confirmed TURN:443 / TLS is already the primary URL** across all default Open Relay providers (`turns:…:443?transport=tcp` listed first). The MQTT data relay remains the ultimate fallback when every TURN URL is firewalled.
+
+### Files Changed
+- `src/lib/yjs-sync.ts` — awareness listener fix (lines 101-116)
+- `src/lib/trystero.ts` — MQTT + torrent relayRedundancy (lines 114-122, 128-138)
+
+### Build Stats
+- Type check: clean
+- Tests: 37 passed (6 files)
+- Build: JS 575 KB (gzip 177 KB), CSS 38.8 KB (gzip 7.3 KB)
+
+---
+
 ## Mandatory Pre-Join Lobby + Shorter Invite Links (2026-04-16)
 
 **PR:** #13

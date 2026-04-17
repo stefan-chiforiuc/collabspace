@@ -98,16 +98,22 @@ export class TrysteroProvider {
     doc.on('update', onUpdate);
     this._destroy.push(() => doc.off('update', onUpdate));
 
-    // Broadcast awareness changes
-    const onAwarenessChange = ({ added, updated, removed }: {
-      added: number[]; updated: number[]; removed: number[];
-    }) => {
+    // Broadcast awareness updates (including periodic keep-alives from the
+    // y-protocols internal timer, which fire on 'update' but not 'change').
+    // Skip updates whose origin is ourselves applying a remote delta —
+    // otherwise we'd echo every received update back out.
+    const onAwarenessUpdate = (
+      { added, updated, removed }: { added: number[]; updated: number[]; removed: number[] },
+      origin: unknown,
+    ) => {
+      if (origin === this) return;
       const changed = added.concat(updated, removed);
+      if (changed.length === 0) return;
       const update = encodeAwarenessUpdate(this.awareness, changed);
       this.sendEncryptedAwareness(update);
     };
-    this.awareness.on('change', onAwarenessChange);
-    this._destroy.push(() => this.awareness.off('change', onAwarenessChange));
+    this.awareness.on('update', onAwarenessUpdate);
+    this._destroy.push(() => this.awareness.off('update', onAwarenessUpdate));
 
     // Listen for auth canaries from other peers. A canary that decrypts
     // cleanly under our key proves we share a password with the sender.

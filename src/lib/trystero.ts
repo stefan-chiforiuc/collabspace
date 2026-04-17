@@ -114,7 +114,11 @@ export function createTrysteroRoom(
       mqttRoom = mqttJoin({
         appId: APP_ID,
         relayUrls: settings.mqtt.servers,
-        relayRedundancy: Math.min(settings.mqtt.servers.length, 4),
+        // Connect to every configured broker so two peers with overlapping
+        // broker lists always share at least one for signaling. A capped
+        // redundancy could leave two peers on disjoint broker subsets and
+        // unable to discover each other.
+        relayRedundancy: settings.mqtt.servers.length,
         turnConfig,
       }, roomCode);
       diag('relay', 'MQTT joinRoom call succeeded');
@@ -130,7 +134,9 @@ export function createTrysteroRoom(
       torrentRoom = torrentJoin({
         appId: APP_ID,
         relayUrls: settings.torrent.servers,
-        relayRedundancy: Math.min(settings.torrent.servers.length, 3),
+        // Same rationale as MQTT — connect to every tracker to maximise
+        // peer-discovery overlap across devices.
+        relayRedundancy: settings.torrent.servers.length,
         turnConfig,
       }, roomCode);
       diag('relay', 'Torrent joinRoom call succeeded');
